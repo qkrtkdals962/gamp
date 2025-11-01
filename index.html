@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>미니게임 천국 (Web)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="gameCanvas" width="480" height="720"></canvas>
+
+    <!-- Overlay UI: Menu -->
+    <div id="menu" class="overlay show">
+      <h1>미니게임 천국</h1>
+      <p class="sub">세 가지 미니게임 중 하나를 선택하세요</p>
+      <div class="grid">
+        <button class="card" data-game="runner">
+          <span class="title">러너</span>
+          <span class="desc">점프해서 장애물 피하기</span>
+        </button>
+        <button class="card" data-game="catcher">
+          <span class="title">캐쳐</span>
+          <span class="desc">떨어지는 별 받기</span>
+        </button>
+        <button class="card" data-game="clicker">
+          <span class="title">클리커</span>
+          <span class="desc">빠르게 표적 클릭</span>
+        </button>
+      </div>
+      <p class="hint">조작: 방향키/스페이스, 마우스/터치 | 메뉴: R</p>
+    </div>
+
+    <!-- Overlay UI: HUD / Game Over -->
+    <div id="hud" class="overlay hidden">
+      <div class="row">
+        <div>점수: <span id="score">0</span></div>
+        <div id="timerWrap" class="hidden">시간: <span id="timer">0</span>s</div>
+        <div>최고: <span id="best">0</span></div>
+      </div>
+      <div id="gameOver" class="gameover hidden">
+        <div class="panel">
+          <h2>게임 오버</h2>
+          <p>이번 점수: <span id="finalScore">0</span></p>
+          <p>최고 점수: <span id="finalBest">0</span></p>
+          <div class="actions">
+            <button id="retryBtn">다시하기</button>
+            <button id="menuBtn">메뉴로</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
