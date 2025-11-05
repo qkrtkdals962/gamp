@@ -1,10 +1,49 @@
+// games.js — Undertale-style vertical timing cast + fishing minigame + fish sprites
 (function(){
   const E = window.Engine;
   const clamp = (v,a,b)=>Math.max(a, Math.min(b, v));
+  const lerp  = (a,b,t)=>a+(b-a)*t;
+  const rand  = (a,b)=>a + Math.random()*(b-a);
 
+  // ---- 물고기 이미지 설정 ----
+  const FISH_SPRITES = {
+    small: 'img/작은-물고기.png',
+    mid:   'img/중간-물고기.png',
+    big:   'img/큰-물고기.png',
+  };
+  // 크기별 목표 높이(px) — 비율 유지
+  const FISH_SPRITE_HEIGHT = { small: 26, mid: 36, big: 52 };
+  function loadImage(src){ const img = new Image(); img.src = src; return img; }
+
+  // ---- 확률 유틸 ----
+  function roll(weights){
+    const ent = Object.entries(weights);
+    const sum = ent.reduce((s,[,w])=>s+w,0);
+    let r = Math.random()*sum;
+    for(const [k,w] of ent){ r-=w; if(r<=0) return k; }
+    return ent[ent.length-1][0];
+  }
+  function pickZoneByAccuracy(dist, perfectWin, nearWin){
+    if(dist <= perfectWin)   return roll({ deep:0.8, mid:0.2, surface:0.0 });
+    if(dist <= nearWin)      return roll({ deep:0.2, mid:0.5, surface:0.3 });
+                              return roll({ deep:0.0, mid:0.2, surface:0.8 });
+  }
+  function pickSizeByZone(zone){
+    if(zone==='surface') return roll({ small:0.80, mid:0.19, big:0.01 });
+    if(zone==='mid')     return roll({ small:0.50, mid:0.30, big:0.20 });
+                         return roll({ small:0.15, mid:0.50, big:0.35 });
+  }
+  function pointsFor(size){ return size==='small'?1:(size==='mid'?3:5); }
+
+  // 큰 물고기 몸부림(상하 진폭/버스트) 강화
+  const FISH_PROFILES = {
+    small:{ amp:18, freq:1.4, jitter:1,  burstProb:0.15, burstDur:0.25, burstForce:140, mass:0.8 },
+    mid:  { amp:30, freq:1.1, jitter:2,  burstProb:0.25, burstDur:0.35, burstForce:170, mass:1.1 },
+    big:  { amp:56, freq:0.8, jitter:4,  burstProb:0.45, burstDur:0.50, burstForce:220, mass:1.6 }
+  };
+
+  // 깊이에 따른 미니게임 난이도
   function depthToConfig(depth01){
-    const rarity     = Math.round(5 + depth01*15);
-    const biteWait   = 0.7 + (1.6 - depth01*0.9)*Math.random();
     const fishSpeed  = 80 + depth01*140;
     const barSize    = 120 - depth01*40;
     const fillRate   = 0.65;
@@ -12,154 +51,227 @@
     const barVMax    = 260 + depth01*180;
     const wheelStep  = 70 + depth01*55;
     const friction   = 2.2;
-    return { rarity, biteWait, fishSpeed, barSize, fillRate, drainRate, barVMax, wheelStep, friction };
+    return { fishSpeed, barSize, fillRate, drainRate, barVMax, wheelStep, friction };
   }
 
+  // ---------- Game ----------
   function GameFishing(){
-    this.state = 'ready';
+    this.state = 'ready';                               // ready → cast_timing → wait → minigame → caught/miss
     this.score = 0;
-    this.charge = 0;
+    this.lastCatchText = '';
+
     this.waterTop = 180;
-
-    this.depth01 = 0;
-    this.cfg = depthToConfig(0);
-    this.waitTimer = 0;
-
     this.lane = { x: E.width*0.5, top: this.waterTop+30, bottom: E.height-60 };
-    this.bar = { y: 0, h: 120, v: 0 };
-    this.fish = { y: 0, vy: 0, target: 0, spd: 120, t: 0 };
 
+    // 플레이어 바(미니게임)
+    this.bar = { y:0, h:120, v:0 };
+
+    // 물고기
+    this.fish = { y:0, vy:0, baseY:0, t:0, oscT:0, burstT:0, spd:120, profile:FISH_PROFILES.small };
+    this.fishSize = 'small';
+    this.zone = 'surface';
+
+    // 진행도
     this.catchMeter = 0;
     this.grace = 0;
+
+    // 타이밍 바(언더테일식)
+    this.timing = { x:24, y:0, w:16, h:0, markerY:0, dir:1, speed:360, centerY:0, perfectWin:8, nearWin:28 };
+
+    // 찌 좌표
+    this.castX = E.width*0.6;
+    this.castY = this.waterTop+60;
+
+    this.depth01 = 0.4;
+    this.cfg = depthToConfig(this.depth01);
+
+    this._resTimer = 0;
     this._waveT = 0;
+
+    // 물고기 이미지 로드
+    this.fishImages = {
+      small: loadImage(FISH_SPRITES.small),
+      mid:   loadImage(FISH_SPRITES.mid),
+      big:   loadImage(FISH_SPRITES.big)
+    };
+    this.currentFishImg = this.fishImages.small;
   }
 
-  GameFishing.prototype.resetRound = function(){
-    this.state='ready';
-    this.charge=0;
+  GameFishing.prototype.resetRound = function(){ this.state='ready'; };
+
+  // --- 타이밍 바 시작 ---
+  GameFishing.prototype._startCastTiming = function(){
+    const y = this.waterTop+20;
+    const h = E.height - this.waterTop - 80;
+    Object.assign(this.timing, { y, h, centerY: y + h*0.5, markerY: y + 8, dir: 1 });
+    this.state = 'cast_timing';
   };
 
-  GameFishing.prototype._confirmCast = function(){
-    this.depth01 = clamp(this.charge, 0.02, 1);
-    this.cfg = depthToConfig(this.depth01);
-    this.waitTimer = this.cfg.biteWait;
+  // --- 타이밍 확정 → zone/size/depth/찌 위치 결정 ---
+  GameFishing.prototype._confirmCastFromTiming = function(){
+    const t = this.timing;
+    const dist = Math.abs(t.markerY - t.centerY);
+
+    // 1) 구역
+    const zone = pickZoneByAccuracy(dist, t.perfectWin, t.nearWin);
+    this.zone = zone;
+
+    // 2) 해당 1/3 구간에서 찌 깊이
+    const y0 = this.waterTop+20;
+    const h  = E.height - this.waterTop - 80;
+    const seg = h/3;
+    const idx = (zone==='surface')?0 : (zone==='mid'?1:2);
+    this.castY = y0 + seg*idx + Math.random()*seg;
     this.castX = Math.round(60 + Math.random()*(E.width-120));
-    this.castY = this.waterTop + 40 + this.depth01*(E.height - this.waterTop - 120);
+
+    // 3) 물고기 크기 & 프로필
+    this.fishSize = pickSizeByZone(zone);
+    this.fish.profile = FISH_PROFILES[this.fishSize];
+    this.currentFishImg = this.fishImages[this.fishSize];
+
+    // 4) 깊이 난이도
+    this.depth01 = clamp((this.castY - y0)/h, 0.02, 1.0);
+    this.cfg = depthToConfig(this.depth01);
+
+    // 5) 입질 대기
+    this.waitTimer = 0.7 + (1.6 - this.depth01*0.9)*Math.random();
     this.state='wait';
   };
 
   GameFishing.prototype.update = function(dt){
-    if(E.keys.has('r')){ this.score=0; this.resetRound(); }
+    if(E.keys.has('r')){ this.score=0; this.lastCatchText=''; this.resetRound(); }
 
-    const clicked   = E.consumeClick();
-    const mouseDown = E.mouse.down;
-    const wheel     = E.peekWheel();
-
+    const clicked = E.consumeClick();
+    const wheel   = E.peekWheel();
     this._waveT += dt;
 
-    // === ready 상태 ===
+    // Ready
     if(this.state==='ready'){
-      if(Math.abs(wheel) > 0){
-        this.state='charge';
-        // 방향 반전: 휠 내림(δY>0) → 깊이 증가
-        this.charge = clamp(this.charge + Math.sign(wheel)*0.03, 0, 1);
-      }else if(clicked || mouseDown){
-        this.state='charge';
-        this.charge = 0;
+      if(E.keys.has(' ') || E.keys.has('enter') || clicked){
+        this._startCastTiming();
       }
+      return;
     }
-    // === charge 상태 ===
-    else if(this.state==='charge'){
-      if(mouseDown) this.charge = clamp(this.charge + dt*0.8, 0, 1);
-      if(Math.abs(wheel) > 0){
-        // 반전된 방향
-        this.charge = clamp(this.charge + Math.sign(wheel)*0.03, 0, 1);
+
+    // 타이밍 바
+    if(this.state==='cast_timing'){
+      const t = this.timing;
+      t.markerY += t.dir * t.speed * dt;
+      const yMin = t.y + 8, yMax = t.y + t.h - 8;
+      if(t.markerY <= yMin){ t.markerY = yMin; t.dir = +1; }
+      if(t.markerY >= yMax){ t.markerY = yMax; t.dir = -1; }
+      if(E.keys.has(' ') || E.keys.has('enter') || clicked){
+        this._confirmCastFromTiming();
       }
-      if(E.keys.has(' ') || E.keys.has('enter')){
-        this._confirmCast();
-      }
+      return;
     }
-    // === wait 상태 ===
-    else if(this.state==='wait'){
+
+    // 대기
+    if(this.state==='wait'){
       this.waitTimer -= dt;
       if(this.waitTimer<=0){
         const ln=this.lane;
-        this.bar.h = this.cfg.barSize;
-        this.bar.y = (ln.top + ln.bottom - this.bar.h)/2;
-        this.bar.v = 0;
+        this.bar.h=this.cfg.barSize;
+        this.bar.y=(ln.top + ln.bottom - this.bar.h)/2;
+        this.bar.v=0;
 
-        this.fish.y = ln.top + Math.random()*(ln.bottom - ln.top);
-        this.fish.spd = this.cfg.fishSpeed;
-        this.fish.t = 0; this.fish.target = this.fish.y;
+        // 물고기 초기화
+        const p=this.fish.profile;
+        Object.assign(this.fish, {
+          oscT:0, t:0, burstT:0, vy:0,
+          baseY:this.castY,
+          y:clamp(this.castY, ln.top+6, ln.bottom-6),
+          spd:this.cfg.fishSpeed
+        });
 
         this.catchMeter = 0.35;
         this.grace = 5.0;
         this.state='minigame';
       }
+      return;
     }
-    // === minigame ===
-    else if(this.state==='minigame'){
+
+    // 미니게임
+    if(this.state==='minigame'){
       const ln=this.lane;
 
-      // 휠 방향 반전: 휠 내림(δY>0) → 아래로 이동(+v)
-      if(Math.abs(wheel) > 0){
-        const notch = (wheel > 0) ? +1 : -1;
+      // 바 이동(휠 내림=아래, 올림=위)
+      if(Math.abs(wheel)>0){
+        const notch = (wheel>0)? +1 : -1;
         this.bar.v += notch * this.cfg.wheelStep;
         this.bar.v = clamp(this.bar.v, -this.cfg.barVMax, this.cfg.barVMax);
       }else{
-        const k = this.cfg.friction;
-        this.bar.v *= Math.exp(-k * dt);
-        if(Math.abs(this.bar.v) < 5) this.bar.v = 0;
+        this.bar.v *= Math.exp(-this.cfg.friction*dt);
+        if(Math.abs(this.bar.v)<5) this.bar.v = 0;
       }
-
-      this.bar.y += this.bar.v * dt;
+      this.bar.y += this.bar.v*dt;
       if(this.bar.y < ln.top){ this.bar.y = ln.top; this.bar.v = 0; }
       if(this.bar.y > ln.bottom - this.bar.h){ this.bar.y = ln.bottom - this.bar.h; this.bar.v = 0; }
 
-      // 물고기 이동
-      this.fish.t += dt;
-      if(this.fish.t > 0.6 + Math.random()*0.9){
+      // 물고기 AI
+      const pr = this.fish.profile;
+      this.fish.oscT += dt;
+      this.fish.t    += dt;
+
+      if(this.fish.t > 0.8 + Math.random()*0.9){
         this.fish.t = 0;
-        this.fish.target = ln.top + Math.random()*(ln.bottom - ln.top);
+        this.fish.baseY = clamp(this.fish.baseY + rand(-40,40), ln.top+16, ln.bottom-16);
       }
-      const dir = Math.sign(this.fish.target - this.fish.y);
-      this.fish.y += (dir * this.fish.spd * dt) + (Math.sin(performance.now()*0.004)*12*dt);
+      if(this.fish.burstT <= 0 && Math.random() < pr.burstProb*dt){
+        this.fish.burstT = pr.burstDur;
+        const sgn = (Math.random()<0.5? -1 : +1);
+        this.fish.vy += sgn * pr.burstForce;
+      }
+      if(this.fish.burstT > 0) this.fish.burstT -= dt;
+      else this.fish.vy *= Math.exp(-2.0*dt*pr.mass);
+
+      const osc  = Math.sin(this.fish.oscT * Math.PI*2 * pr.freq) * pr.amp;
+      const jitt = (Math.random()*2-1) * pr.jitter;
+      const targetY = clamp(this.fish.baseY + osc + jitt, ln.top+6, ln.bottom-6);
+
+      const follow = 8 / pr.mass;
+      this.fish.y = lerp(this.fish.y, targetY, clamp(follow*dt, 0, 1));
+      this.fish.y += this.fish.vy * dt;
       this.fish.y = clamp(this.fish.y, ln.top+6, ln.bottom-6);
 
-      // 캐치 게이지
+      // 진행도
       const inBar = (this.fish.y >= this.bar.y && this.fish.y <= this.bar.y + this.bar.h);
-      if(inBar){
-        this.catchMeter += this.cfg.fillRate * dt;
-      }else{
-        if(this.grace > 0){
-          this.catchMeter = Math.max(0.15, this.catchMeter - this.cfg.drainRate * dt * 0.5);
-        }else{
-          this.catchMeter -= this.cfg.drainRate * dt;
-        }
+      if(inBar) this.catchMeter += this.cfg.fillRate*dt;
+      else{
+        if(this.grace>0) this.catchMeter = Math.max(0.15, this.catchMeter - this.cfg.drainRate*dt*0.5);
+        else             this.catchMeter -= this.cfg.drainRate*dt;
       }
       this.catchMeter = clamp(this.catchMeter, 0, 1);
-      if(this.grace > 0) this.grace -= dt;
+      if(this.grace>0) this.grace -= dt;
 
       if(this.catchMeter >= 1){
         this.state='caught';
-        this.score += this.cfg.rarity;
-        this._resultTimer = 1.0;
-      }else if(this.catchMeter <= 0 && this.grace <= 0){
+        const pts = pointsFor(this.fishSize);
+        this.score += pts;
+        this._resTimer = 1.1;
+        this.lastCatchText = `구역:${this.zone==='surface'?'수면':this.zone==='mid'?'중앙':'심해'} · 크기:${this.fishSize==='small'?'작은':this.fishSize==='mid'?'중간':'큰'} · +${pts}점`;
+      }else if(this.catchMeter <= 0 && this.grace<=0){
         this.state='miss';
-        this._resultTimer = 1.0;
+        this._resTimer = 1.0;
+        this.lastCatchText = '입질 실패';
       }
+      return;
     }
-    // === 결과 ===
-    else if(this.state==='caught' || this.state==='miss'){
-      this._resultTimer -= dt;
-      if(this._resultTimer<=0) this.resetRound();
+
+    // 결과
+    if(this.state==='caught' || this.state==='miss'){
+      this._resTimer -= dt;
+      if(this._resTimer<=0) this.resetRound();
     }
   };
 
   GameFishing.prototype.draw = function(){
     const c=E.ctx; E.clear('#0b1220');
+
+    // 물 배경 + 수면
     const waterTop = this.waterTop;
-    c.fillStyle='#0f213a'; c.fillRect(0,waterTop,E.width,E.height-waterTop);
+    c.fillStyle='#0f213a';
+    c.fillRect(0, waterTop, E.width, E.height-waterTop);
     c.strokeStyle='rgba(180,220,255,.35)'; c.lineWidth=2; c.beginPath();
     for(let x=0;x<=E.width;x+=8){
       const y = waterTop + Math.sin((x+performance.now()*0.08)*0.02)*3;
@@ -167,54 +279,44 @@
     }
     c.stroke();
 
-    E.drawText(`점수: ${this.score}`, 12, 12, '#cfe6ff', 16);
+    // 3등분 가이드
+    const gy0 = this.waterTop+20;
+    const gh  = E.height - this.waterTop - 80;
+    c.strokeStyle='rgba(255,255,255,0.12)'; c.lineWidth=1;
+    for(let i=1;i<=2;i++){
+      const yy = gy0 + gh*(i/3);
+      c.beginPath(); c.moveTo(8, yy); c.lineTo(E.width-8, yy); c.stroke();
+    }
 
+    // HUD
+    E.drawText(`점수: ${this.score}`, 12, 12, '#cfe6ff', 16);
+    if(this.lastCatchText) E.drawText(this.lastCatchText, 12, 58, '#9dc1ff', 14);
+
+    // 상태별
     if(this.state==='ready'){
-      E.drawText('휠로 깊이 조절 → 스페이스/엔터로 캐스팅', 12, 36, '#9dc1ff', 14);
-    }
-    if(this.state==='charge'){
-      E.drawText('휠↓ 깊이↑ / 휠↑ 깊이↓ — 스페이스/엔터로 캐스팅', 12, 36, '#9dc1ff', 14);
-      this.drawDepthGauge(24, waterTop+20, 16, E.height-waterTop-80, this.charge);
-    }
-    if(this.state==='wait'){
+      E.drawText('스페이스/엔터/클릭 → 캐스팅 타이밍!', 12, 36, '#9dc1ff', 14);
+      this.drawCastGaugeFrame();
+    }else if(this.state==='cast_timing'){
+      E.drawText('왼쪽 세로바: 중앙에 맞춰 눌러라! (중앙 가까울수록 심해 확률↑)', 12, 36, '#9dc1ff', 14);
+      this.drawCastTimingBar();
+    }else if(this.state==='wait'){
       E.drawText('입질 대기 중...', 12, 36, '#9dc1ff', 14);
       this.drawBobber(this.castX, this.castY);
-      this.drawDepthGauge(24, waterTop+20, 16, E.height-waterTop-80, this.depth01);
-    }
-    if(this.state==='minigame'){
+      this.drawCastGaugeFrame();
+    }else if(this.state==='minigame'){
       this.drawFishingMini();
-    }
-    if(this.state==='caught'){
-      E.drawText('잡았다! 점수 +' + this.cfg.rarity, 12, 36, '#9dc1ff', 14);
+    }else if(this.state==='caught' || this.state==='miss'){
+      E.drawText(this.state==='caught'?'잡았다!':'놓쳤다...', 12, 36, '#9dc1ff', 14);
       this.drawBobber(this.castX, this.castY);
-      this.drawDepthGauge(24, waterTop+20, 16, E.height-waterTop-80, this.depth01);
-    }
-    if(this.state==='miss'){
-      E.drawText('놓쳤다...', 12, 36, '#9dc1ff', 14);
-      this.drawBobber(this.castX, this.castY);
-      this.drawDepthGauge(24, waterTop+20, 16, E.height-waterTop-80, this.depth01);
+      this.drawCastGaugeFrame();
     }
   };
 
-  GameFishing.prototype.drawBobber = function(x,y){
+  GameFishing.prototype.drawCastGaugeFrame = function(){
     const c=E.ctx;
-    c.strokeStyle='rgba(188,208,255,.9)';
-    c.lineWidth=1.5;
-    c.beginPath();
-    c.moveTo(E.width*0.5, this.waterTop-10);
-    c.quadraticCurveTo(x-20, this.waterTop+20, x, y);
-    c.stroke();
-    c.fillStyle='#ff6058'; c.beginPath(); c.arc(x,y,8,0,Math.PI*2); c.fill();
-    c.fillStyle='#fff'; c.beginPath(); c.arc(x,y-3,4,0,Math.PI*2); c.fill();
-  };
-
-  GameFishing.prototype.drawDepthGauge = function(x,y,w,h,val01){
-    const c=E.ctx;
-    c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(x, y, w, h);
-    const filled = h * val01;
-    c.fillStyle='#9dc1ff'; c.fillRect(x, y + (h-filled), w, filled);
-    c.strokeStyle='rgba(255,255,255,0.25)'; c.lineWidth=1;
-    c.beginPath();
+    const x=24, y=this.waterTop+20, w=16, h=E.height-this.waterTop-80;
+    c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(x,y,w,h);
+    c.strokeStyle='rgba(255,255,255,0.25)'; c.lineWidth=1; c.beginPath();
     for(let i=0;i<=5;i++){
       const yy = y + h*i/5;
       c.moveTo(x-6, yy); c.lineTo(x+w+6, yy);
@@ -222,29 +324,81 @@
     c.stroke();
   };
 
+  GameFishing.prototype.drawCastTimingBar = function(){
+    const c=E.ctx, t=this.timing;
+    // 배경
+    c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(t.x, t.y, t.w, t.h);
+    // wide(끝) 강조
+    c.fillStyle='rgba(255,80,80,0.10)';
+    c.fillRect(t.x-2, t.y, t.w+4, 22);
+    c.fillRect(t.x-2, t.y+t.h-22, t.w+4, 22);
+    // near(노랑)
+    c.fillStyle='rgba(255,220,120,0.12)';
+    c.fillRect(t.x-2, t.centerY - t.nearWin, t.w+4, t.nearWin*2);
+    // perfect(초록)
+    c.fillStyle='rgba(120,255,180,0.18)';
+    c.fillRect(t.x-2, t.centerY - t.perfectWin, t.w+4, t.perfectWin*2);
+    // 중앙 라인
+    c.strokeStyle='rgba(173,216,255,0.7)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(t.x-6, t.centerY); c.lineTo(t.x+t.w+6, t.centerY); c.stroke();
+    // 마커
+    c.fillStyle='#e8f1ff';
+    c.fillRect(t.x-2, t.markerY-6, t.w+4, 12);
+    c.strokeStyle='#bcd2ff'; c.strokeRect(t.x-2, t.markerY-6, t.w+4, 12);
+  };
+
+  GameFishing.prototype.drawBobber = function(x,y){
+    const c=E.ctx;
+    c.strokeStyle='rgba(188,208,255,.9)'; c.lineWidth=1.5;
+    c.beginPath(); c.moveTo(E.width*0.5, this.waterTop-10);
+    c.quadraticCurveTo(x-20, this.waterTop+20, x, y); c.stroke();
+    c.fillStyle='#ff6058'; c.beginPath(); c.arc(x,y,8,0,Math.PI*2); c.fill();
+    c.fillStyle='#fff'; c.beginPath(); c.arc(x,y-3,4,0,Math.PI*2); c.fill();
+  };
+
   GameFishing.prototype.drawFishingMini = function(){
     const c=E.ctx, ln=this.lane;
+
+    // 트랙
     c.fillStyle='rgba(255,255,255,0.07)';
     c.fillRect(ln.x-70, ln.top, 140, ln.bottom - ln.top);
-    c.fillStyle='#79c2ff';
-    c.beginPath(); c.arc(ln.x+25, this.fish.y, 10, 0, Math.PI*2); c.fill();
-    c.beginPath();
-    c.moveTo(ln.x+15, this.fish.y);
-    c.lineTo(ln.x+5, this.fish.y-6);
-    c.lineTo(ln.x+5, this.fish.y+6);
-    c.closePath(); c.fillStyle='#5aa9e6'; c.fill();
+
+    // 스프라이트로 물고기 그리기
+    const img = this.currentFishImg;
+    const targetH = FISH_SPRITE_HEIGHT[this.fishSize] || 32;
+    if(img && img.complete && img.naturalWidth > 0){
+      const ar = img.width / img.height;
+      const drawW = Math.max(1, targetH * ar);
+      const drawX = ln.x + 10;
+      const drawY = this.fish.y - targetH/2;
+      const prev = c.imageSmoothingEnabled;
+      c.imageSmoothingEnabled = true;
+      c.drawImage(img, drawX, drawY, drawW, targetH);
+      c.imageSmoothingEnabled = prev;
+    }else{
+      // 로딩 전 폴백(임시 원)
+      c.fillStyle = '#79c2ff';
+      c.beginPath(); c.arc(ln.x+25, this.fish.y, 10, 0, Math.PI*2); c.fill();
+    }
+
+    // 플레이어 바
     c.fillStyle='rgba(255,209,102,0.35)';
     c.fillRect(ln.x-55, this.bar.y, 110, this.bar.h);
     c.strokeStyle='rgba(255,209,102,0.9)';
-    c.lineWidth=2;
-    c.strokeRect(ln.x-55, this.bar.y, 110, this.bar.h);
+    c.lineWidth=2; c.strokeRect(ln.x-55, this.bar.y, 110, this.bar.h);
+
+    // 진행도
     const gx = 40, gy = this.waterTop - 30, gw = E.width-80, gh = 8;
     c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(gx,gy,gw,gh);
     c.fillStyle='#a3d6a6'; c.fillRect(gx,gy,gw*this.catchMeter,gh);
+
+    const zoneK = this.zone==='surface'?'수면':this.zone==='mid'?'중앙':'심해';
+    const sizeK = this.fishSize==='small'?'작은':this.fishSize==='mid'?'중간':'큰';
     const info = (this.grace>0 ? `무적 ${this.grace.toFixed(1)}s • ` : '')
-               + `휠 내림=아래로, 휠 올림=위로 · v=${this.bar.v.toFixed(0)}px/s`;
+               + `${zoneK} • ${sizeK} 물고기 • 휠↓=아래, ↑=위`;
     E.drawText(info, 12, 36, '#9dc1ff', 14);
   };
 
+  // export
   window.GameFishing = GameFishing;
 })();
