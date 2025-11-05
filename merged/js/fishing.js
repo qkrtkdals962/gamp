@@ -20,6 +20,7 @@
     this.score = 0;
     this.charge = 0;
     this.waterTop = 180;
+    this.time = 30; // 30s session timer
 
     this.depth01 = 0;
     this.cfg = depthToConfig(0);
@@ -52,6 +53,9 @@
     const wheel     = E.peekWheel();
 
     this._waveT += dt;
+
+    // countdown timer
+    if (this.time > 0) { this.time -= dt; if (this.time <= 0) { this.time = 0; this.state = 'done'; } }
 
     if(this.state==='ready'){
       if(Math.abs(wheel) > 0){ this.state='charge'; this.charge = clamp(this.charge + Math.sign(wheel)*0.03, 0, 1); }
@@ -128,7 +132,7 @@
   };
 
   GameFishing.prototype.getScore = function(){ return this.score; };
-  Object.defineProperty(GameFishing.prototype,'isOver',{ get(){ return false; }});
+  Object.defineProperty(GameFishing.prototype,'isOver',{ get(){ return this.time <= 0; }});
 
   window.GameFishing = GameFishing;
 })();

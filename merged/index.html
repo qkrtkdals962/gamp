@@ -38,8 +38,7 @@
 
     <!-- 메인 메뉴 -->
     <div id="menu" class="overlay show">
-      <h1>미니게임 천국</h1>
-      <p class="sub">두 가지 미니게임 중 하나를 선택하세요</p>
+      <img src="image/logo.png" id="logo" class="logo" alt="미니게임 천국" />
       <div class="grid">
         <button class="card" data-game="runner">
           <span class="title">러너</span>
@@ -53,6 +52,10 @@
           <span class="title">🎣 낚시</span>
           <span class="desc">휠로 깊이 조절, 캐치 미니게임</span>
         </button>
+        <button class="card" data-game="challenge">
+          <span class="title">Challenge</span>
+          <span class="desc">3게임 랜덤 · 5라운드</span>
+        </button>
       </div>
       <p class="hint">조작: 러너(스페이스, ↓), 에임트레이너(마우스) | 메뉴: 좌상단 버튼</p>
     </div>
@@ -62,8 +65,12 @@
       <div class="row">
         <div>점수: <span id="score">0</span></div>
         <div id="timerWrap" class="timer-display hidden"> <span id="timer">30</span> </div>
-        <div>최고: <span id="best">0</span></div>
+  <div id="bestWrap" class="hidden">최고: <span id="best">0</span></div>
+        <div id="goalWrap" class="goal hidden">
+          목표: <span id="goalValue">0</span>
+        </div>
       </div>
+      <div id="targetWrap" class="target-display hidden"><span id="targetText"></span></div>
     </div>
 
     <div id="gameOver" class="gameover hidden">
@@ -97,6 +104,14 @@
       </div>
     </div>
 
+    <!-- Challenge countdown overlay -->
+    <div id="countdown" class="overlay hidden">
+      <div class="panel" style="text-align:center; padding: 24px 32px;">
+        <h2 style="margin:0 0 10px 0;">Challenge</h2>
+        <div id="countdownNumber" class="countdown-number" style="font-size:64px; font-weight:800;">3</div>
+      </div>
+    </div>
+
     <!-- 에임 트레이너 실시간 통계 -->
     <div id="aimStats" class="aim-stats">
       <div class="stat-item">
@@ -110,6 +125,18 @@
       <div class="stat-item">
         <span class="label">명중</span>
         <span id="hits" class="value">0/0</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">점수</span>
+        <span id="aimScore" class="value">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">남은</span>
+        <span id="aimTime" class="value">30s</span>
+      </div>
+      <div class="stat-item hidden" id="aimTargetWrap">
+        <span class="label">목표</span>
+        <span id="aimTarget" class="value">0</span>
       </div>
     </div>
 
@@ -128,6 +155,7 @@
   <script src="js/runner.js"></script>
   <script src="js/fishing.js"></script>
   <script src="js/clicker_improved.js"></script>
+  <script src="js/challenge.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

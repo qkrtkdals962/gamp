@@ -1,0 +1,23 @@
+# Only track the merged build for this repo
+/
+!/merged/
+
+# Ignore nested projects and other folders
+/GameProject/
+/gamp_clicker/
+/gamp-sangmin/
+
+# Archives and large binaries
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+# Editor/OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Node/Vite caches (if present)
+dist/
+node_modules/

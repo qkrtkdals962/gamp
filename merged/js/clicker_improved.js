@@ -78,10 +78,10 @@
       // Default to synthesized gunshot so we always have sound
       this.playGunshot = this.playGunshotSynth.bind(this);
 
-      // Try to load an optional MP3 from the merged/js folder
-      // Path is relative to index.html (merged/), so use 'js/gunshot.mp3'
+      // Try to load an optional MP3 from the merged/sound folder
+      // Path is relative to index.html (merged/), so use 'sound/gunshot.mp3'
       if (this.audioContext) {
-        fetch('js/gunshot.mp3').then(res => {
+        fetch('sound/gunshot.mp3').then(res => {
           if (!res.ok) throw new Error('gunshot.mp3 not found');
           return res.arrayBuffer();
         }).then(buf => this.audioContext.decodeAudioData(buf)).then(decoded => {
@@ -90,7 +90,7 @@
         }).catch(() => {
           // Fallback to HTMLAudio even if AudioContext exists (useful for file:// or CORS)
           try {
-            this.gunshotAudio = new Audio('js/gunshot.mp3');
+            this.gunshotAudio = new Audio('sound/gunshot.mp3');
             this.gunshotAudio.volume = 0.7; this.gunshotAudio.preload = 'auto';
             this.playGunshot = () => { try { this.gunshotAudio.currentTime = 0; this.gunshotAudio.play(); } catch(e){} };
           } catch (e) {
@@ -100,7 +100,7 @@
       } else {
         // As a last resort, try HTMLAudioElement path (may be blocked by policies)
         try {
-          this.gunshotAudio = new Audio('js/gunshot.mp3');
+          this.gunshotAudio = new Audio('sound/gunshot.mp3');
           this.gunshotAudio.volume = 0.7; this.gunshotAudio.preload = 'auto';
           this.playGunshot = () => { try { this.gunshotAudio.currentTime = 0; this.gunshotAudio.play(); } catch(e){} };
         } catch (e) { /* no audio */ }

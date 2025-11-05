@@ -54,6 +54,23 @@
     // background scroll state
     this.bgX = 0;      // current scroll offset in screen pixels
     this.bgFactor = 0.6; // parallax factor relative to world speed
+
+    // sounds
+    this.sfx = {
+      jump: null,
+      bg: null
+    };
+    try {
+      this.sfx.jump = new Audio('sound/Super Mario Bros. Jump.mp3');
+      this.sfx.jump.volume = 0.25;
+      this.sfx.jump.preload = 'auto';
+    } catch(e){}
+    try {
+      this.sfx.bg = new Audio('sound/1117. Liar.mp3');
+      this.sfx.bg.loop = true;
+      this.sfx.bg.volume = 0.2; // quieter background music
+      this.sfx.bg.preload = 'auto';
+    } catch(e){}
   }
   RunnerGame.prototype.loadImages = function(){
     const mk = (src)=>{ const i=new Image(); i.src = src; return i; };
@@ -92,6 +109,9 @@
     this.shield = 0; this.invulnTimer = 0; this.slowUntil = 0; this.scoreBonus = 0;
     this.lives = this.livesMax;
     this.exp = 0; this.expLevel = 0; this.inLevelUp = false; this.levelCards = []; this.levelTimer = 0; this.prevMouseDown = false; this.resumeCountdown = 0;
+
+    // start background music (user interacted by selecting game)
+    if (this.sfx.bg){ try { this.sfx.bg.currentTime = 0; this.sfx.bg.play(); } catch(e){} }
   };
   RunnerGame.prototype.control = function(){
     const isDown = E.keys.has('arrowdown') || E.keys.has('s');
@@ -105,6 +125,7 @@
       const justPressed = this.jumpHeld && !this.prevJumpHeld;
       if(justPressed && !this.sliding){
         this.player.vy = this.jumpV; this.player.onGround = false;
+        if (this.sfx.jump){ try { this.sfx.jump.currentTime = 0; this.sfx.jump.play(); } catch(e){} }
       }
     }
     // remember last state for edge detection
@@ -390,4 +411,9 @@
   window.Games = Object.assign(window.Games || {}, { RunnerGame });
   // also expose as plain RunnerGame for merged main.js
   window.RunnerGame = RunnerGame;
+
+  // Optional hook for main scene cleanup
+  RunnerGame.prototype.stopAudio = function(){
+    try { if(this.sfx.bg){ this.sfx.bg.pause(); this.sfx.bg.currentTime = 0; } } catch(e){}
+  };
 })();

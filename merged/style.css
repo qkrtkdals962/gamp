@@ -52,6 +52,13 @@ canvas {
     opacity: 1;
 }
 
+/* HUD should be visible but not intercept clicks */
+#hud.overlay.show {
+    pointer-events: none;
+    visibility: visible;
+    opacity: 1;
+}
+
 .hidden { 
     display: none !important; 
 }
@@ -62,6 +69,14 @@ canvas {
     gap: 20px;
     text-align: center;
     pointer-events: auto;
+}
+
+#menu .logo {
+    display: block;
+    margin: 0 auto;
+    width: min(280px, 60vw);
+    height: auto;
+    filter: drop-shadow(0 2px 0 #ffe6a6);
 }
 
 #menu h1 { 
@@ -80,8 +95,19 @@ canvas {
     display: grid; 
     grid-template-columns: repeat(2, minmax(140px, 1fr)); 
     gap: 15px; 
-    padding: 0 16px;
+    padding: 0; 
+    width: min(96vw, 540px);
+    margin: 0 auto;
 }
+
+@media (min-width: 560px) {
+    #menu .grid {
+        grid-template-columns: repeat(3, minmax(140px, 1fr));
+    }
+}
+
+/* Place Challenge alone on its own bottom row spanning all columns */
+.card[data-game="challenge"] { grid-column: 1 / -1; }
 
 .card { 
     border: 3px solid #e2c546; 
@@ -113,10 +139,11 @@ canvas {
 }
 
 #menu .hint { 
-    margin: 10px 0 0 0; 
+    margin: 10px auto 0 auto; 
     color: #7a6f43; 
     font-size: 12px; 
     opacity: 0.9; 
+    width: min(96vw, 540px);
 }
 
 /* HUD (게임 중) */
@@ -164,6 +191,12 @@ canvas {
 
 .timer-display.warning { background: rgba(211, 47, 47, 0.9); border-color: #ff3366; animation: pulse 0.8s ease-in-out infinite; }
 .timer-display.warning #timer { color: #fff; }
+/* right-aligned variant for fishing */
+.timer-display.right { left: auto; right: 20px; transform: none; }
+
+/* Challenge target display */
+.target-display { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.65); color: #fff; padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); font-weight: 800; z-index: 1500; }
+.target-display.hidden { display: none !important; }
 
 @keyframes pulse { 0%,100%{ transform: translateX(-50%) scale(1); box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);} 50%{ transform: translateX(-50%) scale(1.08); box-shadow: 0 6px 20px rgba(255, 51, 102, 0.8);} }
 
@@ -186,7 +219,7 @@ button { font: inherit; border: 2px solid #caa62f; background: #ffe179; padding:
 button:hover { filter: brightness(0.98); }
 
 /* 에임 트레이너 실시간 통계 */
-.aim-stats { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); display: none; gap: 20px; background: rgba(15, 15, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3); color: white; font-size: 14px; z-index: 100; }
+.aim-stats { position: fixed; top: 110px; left: 50%; transform: translateX(-50%); display: none; gap: 20px; background: rgba(15, 15, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3); color: white; font-size: 14px; z-index: 100; }
 .aim-stats.show { display: flex; }
 .stat-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .stat-item .label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; }
@@ -216,6 +249,11 @@ button:hover { filter: brightness(0.98); }
 
 /* 반응형 */
 @media (max-width: 768px) {
-  #menu .grid { grid-template-columns: 1fr; max-width: 300px; }
-  #menu h1 { font-size: 1.5rem; }
+    #menu .grid { grid-template-columns: 1fr; width: min(96vw, 360px); }
+    #menu h1 { font-size: 1.5rem; }
 }
+
+/* Challenge countdown overlay */
+#countdown.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.25); z-index: 2600; }
+#countdown.overlay.hidden { display: none !important; }
+.countdown-number { font-size: 64px; font-weight: 900; color: #2a2106; text-shadow: 0 2px 0 #ffe6a6; }
