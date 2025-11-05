@@ -1,0 +1,221 @@
+* { box-sizing: border-box; }
+
+/* 에임 트레이너 모드에서만 기본 커서 숨기기 */
+body.aim-trainer-mode,
+body.aim-trainer-mode * {
+    cursor: none !important;
+}
+
+html, body { 
+    height: 100%; 
+    margin: 0; 
+    background: #f7e08b; 
+    font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; 
+    transition: background 0.5s ease; 
+}
+
+#app { 
+    position: relative; 
+    height: 100%; 
+    display: grid;
+    place-items: center;
+}
+
+canvas { 
+    width: min(96vw, 540px); 
+    height: calc(min(96vw, 540px) * 1.5); 
+    background: #fff6cf; 
+    border: 4px solid #e2c546; 
+    border-radius: 12px; 
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15); 
+}
+
+/* 3D 캔버스는 클릭 가능하도록 */
+#renderCanvas3D {
+    pointer-events: auto !important;
+}
+
+.overlay { 
+    position: absolute; 
+    inset: 0; 
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.overlay.show { 
+    pointer-events: auto;
+    visibility: visible;
+    opacity: 1;
+}
+
+.hidden { 
+    display: none !important; 
+}
+
+/* 메뉴 화면 */
+#menu { 
+    display: grid;
+    gap: 20px;
+    text-align: center;
+    pointer-events: auto;
+}
+
+#menu h1 { 
+    margin: 0; 
+    color: #2a2106; 
+    text-shadow: 0 2px 0 #ffe6a6; 
+    font-size: 2rem;
+}
+
+#menu .sub { 
+    margin: 0; 
+    color: #6a5e33; 
+}
+
+#menu .grid { 
+    display: grid; 
+    grid-template-columns: repeat(2, minmax(140px, 1fr)); 
+    gap: 15px; 
+    padding: 0 16px;
+}
+
+.card { 
+    border: 3px solid #e2c546; 
+    background: linear-gradient(#fff6cf, #ffeaa1); 
+    padding: 20px 16px; 
+    border-radius: 10px; 
+    cursor: pointer; 
+    transition: transform .1s ease, box-shadow .1s ease; 
+    text-align: center;
+}
+
+.card:hover { 
+    transform: translateY(-2px); 
+    box-shadow: 0 6px 12px rgba(0,0,0,0.1); 
+}
+
+.card .title { 
+    display: block; 
+    font-weight: 800; 
+    color: #3f3209; 
+    font-size: 1.1rem;
+}
+
+.card .desc { 
+    display: block; 
+    margin-top: 6px; 
+    color: #6a5e33; 
+    font-size: 12px; 
+}
+
+#menu .hint { 
+    margin: 10px 0 0 0; 
+    color: #7a6f43; 
+    font-size: 12px; 
+    opacity: 0.9; 
+}
+
+/* HUD (게임 중) */
+#hud { 
+    align-content: start; 
+    padding: 10px; 
+}
+
+#hud .row { 
+    position: absolute; 
+    top: 10px; 
+    left: 10px; 
+    right: 10px; 
+    display: flex; 
+    justify-content: space-between; 
+    gap: 16px; 
+    color: #3a2f0b; 
+    font-weight: 700; 
+}
+
+/* 타이머 디스플레이 */
+.timer-display {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1500;
+    background: rgba(15, 15, 30, 0.9);
+    padding: 8px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    font-weight: 900;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.timer-display.hidden { display: none !important; }
+#timer { font-size: 1.8rem; font-weight: 900; color: #ffc107; }
+.timer-display::after { content: 's'; font-size: 1rem; color: #aaa; font-weight: normal; }
+
+.timer-display.warning { background: rgba(211, 47, 47, 0.9); border-color: #ff3366; animation: pulse 0.8s ease-in-out infinite; }
+.timer-display.warning #timer { color: #fff; }
+
+@keyframes pulse { 0%,100%{ transform: translateX(-50%) scale(1); box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);} 50%{ transform: translateX(-50%) scale(1.08); box-shadow: 0 6px 20px rgba(255, 51, 102, 0.8);} }
+
+/* 메뉴로 돌아가기 버튼 */
+.back-button {
+  position: fixed; top: 10px; left: 10px; z-index: 1000; padding: 8px 16px;
+  background: rgba(226, 197, 70, 0.95); border: 2px solid #caa62f; border-radius: 8px;
+  cursor: pointer; font-weight: 700; color: #3f3209; display: none; align-items: center; gap: 6px; transition: all 0.2s; font-size: 14px; pointer-events: auto;
+}
+.back-button:hover { background: #ffe179; transform: translateX(-2px); }
+.back-button.show { display: flex; }
+
+/* 게임오버 화면 */
+.gameover { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0,0,0,0.25); z-index: 2000; }
+.gameover:not(.hidden) { display: grid; }
+.gameover .panel { background: #fff; border: 3px solid #e2c546; border-radius: 12px; padding: 16px 20px; width: min(92vw, 360px); text-align: center; }
+.gameover .actions { display: flex; justify-content: center; gap: 12px; margin-top: 8px; }
+
+button { font: inherit; border: 2px solid #caa62f; background: #ffe179; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+button:hover { filter: brightness(0.98); }
+
+/* 에임 트레이너 실시간 통계 */
+.aim-stats { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); display: none; gap: 20px; background: rgba(15, 15, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(0, 212, 255, 0.3); color: white; font-size: 14px; z-index: 100; }
+.aim-stats.show { display: flex; }
+.stat-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.stat-item .label { font-size: 0.7rem; color: #aaa; text-transform: uppercase; }
+.stat-item .value { font-size: 1.1rem; font-weight: bold; color: #fff; }
+.stat-item .value.highlight { color: #ffd700; }
+.stat-item .value.combo { color: #ff3366; }
+
+/* 조준점 */
+.crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 1000; display: none; }
+.crosshair.show { display: block; }
+.crosshair-dot { width: 4px; height: 4px; background: #00ff00; border-radius: 50%; box-shadow: 0 0 8px #00ff00; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.crosshair-line { background: rgba(0, 255, 0, 0.6); position: absolute; box-shadow: 0 0 4px #00ff00; top: 50%; left: 50%; }
+.crosshair-line.h { width: 20px; height: 2px; transform: translate(-50%, -50%); }
+.crosshair-line.v { width: 2px; height: 20px; transform: translate(-50%, -50%); }
+
+/* 감도 표시 */
+.sensitivity-display { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); color: #00ff00; padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: bold; border: 2px solid #00ff00; box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); z-index: 1001; display: none; animation: fadeInOut 2s ease-in-out; }
+.sensitivity-display.show { display: block; }
+@keyframes fadeInOut { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 15% { opacity: 1; transform: translateX(-50%) translateY(0); } 85% { opacity: 1; transform: translateX(-50%) translateY(0); } 100% { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
+
+/* 에임 트레이너 추가 통계 그리드 */
+.extra-stats { display: none; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0; }
+.extra-stats.show { display: grid; }
+.extra-stat { background: rgba(230, 200, 100, 0.2); padding: 8px; border-radius: 6px; font-size: 12px; }
+.extra-stat .label { color: #6a5e33; display: block; margin-bottom: 4px; }
+.extra-stat .value { color: #2a2106; font-weight: bold; font-size: 16px; }
+
+/* 반응형 */
+@media (max-width: 768px) {
+  #menu .grid { grid-template-columns: 1fr; max-width: 300px; }
+  #menu h1 { font-size: 1.5rem; }
+}

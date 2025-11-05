@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>미니게임 허브: 러너 & 에임 트레이너</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+</head>
+<body>
+  <!-- 메뉴로 돌아가기 버튼 -->
+  <button id="backButton" class="back-button">◀ 메뉴로</button>
+
+  <div id="app">
+    <!-- 2D 메인 캔버스 (러너 전용) -->
+    <canvas id="gameCanvas" width="480" height="720"></canvas>
+
+    <!-- 3D 렌더 캔버스 (에임 트레이너 전용) -->
+    <canvas id="renderCanvas3D" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; pointer-events: auto; z-index: 1;"></canvas>
+
+    <!-- 에임 트레이너 시작 화면 -->
+    <div id="aimTrainerStart" class="overlay hidden" style="z-index: 2500; background: rgba(10, 10, 15, 0.98);">
+      <div class="panel" style="background: rgba(15, 15, 30, 0.95); border: 2px solid rgba(0, 212, 255, 0.5); padding: 40px 30px; text-align: center; max-width: 400px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);">
+        <h2 style="color: #00d4ff; margin: 0 0 10px 0; font-size: 2rem;">🎯 에임 트레이너</h2>
+        <p style="color: #aaa; font-size: 0.9rem; margin: 0 0 20px 0;">3D 타겟 슈팅 게임</p>
+        <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: left;">
+          <h3 style="color: #ffc107; margin: 0 0 15px 0; font-size: 1.1rem;">게임 규칙</h3>
+          <ul style="color: #ccc; font-size: 0.9rem; margin: 0; padding-left: 20px; line-height: 1.8;">
+            <li>제한 시간: <strong style="color: #ffc107;">30초</strong></li>
+            <li>마우스로 타겟을 조준하고 클릭</li>
+            <li>연속 명중으로 <strong style="color: #ff3366;">콤보</strong> 획득</li>
+            <li>타겟 종류: 파랑(5점) 빨강(10점) 금색(15점)</li>
+          </ul>
+        </div>
+        <button id="aimTrainerPlayBtn" class="aim-play-button">▶ PLAY</button>
+      </div>
+    </div>
+
+    <!-- 메인 메뉴 -->
+    <div id="menu" class="overlay show">
+      <h1>미니게임 천국</h1>
+      <p class="sub">두 가지 미니게임 중 하나를 선택하세요</p>
+      <div class="grid">
+        <button class="card" data-game="runner">
+          <span class="title">러너</span>
+          <span class="desc">점프해서 장애물 피하기</span>
+        </button>
+        <button class="card" data-game="clicker">
+          <span class="title">🎯 에임 트레이너</span>
+          <span class="desc">3D 타겟 클릭 - FPS 스타일</span>
+        </button>
+        <button class="card" data-game="fishing">
+          <span class="title">🎣 낚시</span>
+          <span class="desc">휠로 깊이 조절, 캐치 미니게임</span>
+        </button>
+      </div>
+      <p class="hint">조작: 러너(스페이스, ↓), 에임트레이너(마우스) | 메뉴: 좌상단 버튼</p>
+    </div>
+
+    <!-- HUD / 게임오버 -->
+    <div id="hud" class="overlay hidden">
+      <div class="row">
+        <div>점수: <span id="score">0</span></div>
+        <div id="timerWrap" class="timer-display hidden"> <span id="timer">30</span> </div>
+        <div>최고: <span id="best">0</span></div>
+      </div>
+    </div>
+
+    <div id="gameOver" class="gameover hidden">
+      <div class="panel">
+        <h2 id="gameOverTitle">게임 오버</h2>
+        <p id="gameOverMessage" style="color: #666; font-size: 14px; margin: 5px 0 15px 0;"></p>
+        <p>이번 점수: <span id="finalScore">0</span></p>
+        <p>최고 점수: <span id="finalBest">0</span></p>
+        <div id="extraStats" class="extra-stats">
+          <div class="extra-stat">
+            <span class="label">정확도</span>
+            <span id="finalAccuracy" class="value">0%</span>
+          </div>
+          <div class="extra-stat">
+            <span class="label">최대 콤보</span>
+            <span id="finalMaxCombo" class="value">×0</span>
+          </div>
+          <div class="extra-stat">
+            <span class="label">총 발사</span>
+            <span id="finalShots" class="value">0발</span>
+          </div>
+          <div class="extra-stat">
+            <span class="label">명중</span>
+            <span id="finalHits" class="value">0발</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="retryBtn">다시하기</button>
+          <button id="menuBtn">메뉴로</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 에임 트레이너 실시간 통계 -->
+    <div id="aimStats" class="aim-stats">
+      <div class="stat-item">
+        <span class="label">정확도</span>
+        <span id="accuracy" class="value highlight">0%</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">콤보</span>
+        <span id="combo" class="value combo">×0</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">명중</span>
+        <span id="hits" class="value">0/0</span>
+      </div>
+    </div>
+
+    <!-- 조준점 -->
+    <div id="crosshair" class="crosshair">
+      <div class="crosshair-dot"></div>
+      <div class="crosshair-line h"></div>
+      <div class="crosshair-line v"></div>
+    </div>
+
+    <!-- 감도 표시 -->
+    <div id="sensitivityDisplay" class="sensitivity-display">감도: <span id="sensitivityValue">5</span></div>
+  </div>
+
+  <script src="js/engine.js"></script>
+  <script src="js/runner.js"></script>
+  <script src="js/fishing.js"></script>
+  <script src="js/clicker_improved.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
