@@ -5,21 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>초간단 낚시</title>
   <style>
-    html,body{height:100%;margin:0;background:#0b1020;color:#e9f1ff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-    #wrap{height:100%;display:grid;place-items:center}
-    canvas{width:min(96vw,540px);height:calc(min(96vw,540px)*1.5);background:#08132a;border:2px solid #2a3f73;border-radius:12px;box-shadow:0 8px 20px rgba(0,0,0,.35)}
-    .hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;color:#bcd0ff;opacity:.9;font-size:14px}
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #0b1020;
+      color: #e9f1ff;
+      font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    #wrap {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      position: relative; /* 시작 버튼 오버레이용 */
+    }
+    canvas {
+      width: min(96vw, 540px);
+      height: calc(min(96vw, 540px) * 1.5);
+      background: #08132a;
+      border: 2px solid #2a3f73;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,.35);
+    }
+    .hint {
+      position: fixed;
+      bottom: 10px;
+      left: 0; right: 0;
+      text-align: center;
+      color: #bcd0ff;
+      opacity: .9;
+      font-size: 14px;
+      pointer-events: none;
+    }
+    #startBtn {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: none;
+      background: #ffd24c;
+      color: #1b1603;
+      cursor: pointer;
+      z-index: 10;          /* 캔버스 위로 */
+      pointer-events: auto; /* 클릭 가능 */
+      box-shadow: 0 6px 14px rgba(0,0,0,.25);
+    }
+    #startBtn:hover { filter: brightness(0.98); }
   </style>
 </head>
 <body>
   <div id="wrap">
     <canvas id="game" width="480" height="720"></canvas>
+    <button id="startBtn">▶ 게임 시작</button>
   </div>
 
   <div class="hint">좌클릭: 캐스팅 → (1~10초 뒤 입질) → 좌클릭: 낚기 • R: 리셋</div>
 
-  <script src="engine.js"></script>
-  <script src="games.js"></script>
-  <script src="main.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
