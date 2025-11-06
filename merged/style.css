@@ -100,10 +100,9 @@ canvas {
     margin: 0 auto;
 }
 
+/* Three cards on wide screens (Runner, Aim, Fishing), Challenge spans bottom */
 @media (min-width: 560px) {
-    #menu .grid {
-        grid-template-columns: repeat(3, minmax(140px, 1fr));
-    }
+    #menu .grid { grid-template-columns: repeat(3, minmax(140px, 1fr)); }
 }
 
 /* Place Challenge alone on its own bottom row spanning all columns */

@@ -8,7 +8,7 @@
       // Runner score targets per round
       runner:  [200, 500, 800, 1100, 1500],
       // Fishing score targets per round (within 30s)
-      fishing: [ 60, 100, 150,  200,  260],
+      fishing: [ 2, 4, 6,  8,  10],
       // Aim Trainer score targets per round (within 30s)
       clicker: [300, 450, 600,  800, 1000]
     }

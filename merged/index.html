@@ -6,6 +6,7 @@
   <title>미니게임 허브: 러너 & 에임 트레이너</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 </head>
 <body>
   <!-- 메뉴로 돌아가기 버튼 -->
@@ -18,23 +19,7 @@
     <!-- 3D 렌더 캔버스 (에임 트레이너 전용) -->
     <canvas id="renderCanvas3D" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: none; pointer-events: auto; z-index: 1;"></canvas>
 
-    <!-- 에임 트레이너 시작 화면 -->
-    <div id="aimTrainerStart" class="overlay hidden" style="z-index: 2500; background: rgba(10, 10, 15, 0.98);">
-      <div class="panel" style="background: rgba(15, 15, 30, 0.95); border: 2px solid rgba(0, 212, 255, 0.5); padding: 40px 30px; text-align: center; max-width: 400px; border-radius: 15px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);">
-        <h2 style="color: #00d4ff; margin: 0 0 10px 0; font-size: 2rem;">🎯 에임 트레이너</h2>
-        <p style="color: #aaa; font-size: 0.9rem; margin: 0 0 20px 0;">3D 타겟 슈팅 게임</p>
-        <div style="background: rgba(255, 255, 255, 0.05); padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: left;">
-          <h3 style="color: #ffc107; margin: 0 0 15px 0; font-size: 1.1rem;">게임 규칙</h3>
-          <ul style="color: #ccc; font-size: 0.9rem; margin: 0; padding-left: 20px; line-height: 1.8;">
-            <li>제한 시간: <strong style="color: #ffc107;">30초</strong></li>
-            <li>마우스로 타겟을 조준하고 클릭</li>
-            <li>연속 명중으로 <strong style="color: #ff3366;">콤보</strong> 획득</li>
-            <li>타겟 종류: 파랑(5점) 빨강(10점) 금색(15점)</li>
-          </ul>
-        </div>
-        <button id="aimTrainerPlayBtn" class="aim-play-button">▶ PLAY</button>
-      </div>
-    </div>
+    <!-- 에임 트레이너 시작 화면 제거: 자동 시작으로 변경 -->
 
     <!-- 메인 메뉴 -->
     <div id="menu" class="overlay show">
@@ -42,22 +27,22 @@
       <div class="grid">
         <button class="card" data-game="runner">
           <span class="title">러너</span>
-          <span class="desc">점프해서 장애물 피하기</span>
+          <span class="desc">키보드 방향키를 이용한 장애물 피하기 게임</span>
         </button>
         <button class="card" data-game="clicker">
-          <span class="title">🎯 에임 트레이너</span>
-          <span class="desc">3D 타겟 클릭 - FPS 스타일</span>
+          <span class="title">에임 트레이너</span>
+          <span class="desc">마우스를 이용한 포인터 게임</span>
         </button>
         <button class="card" data-game="fishing">
-          <span class="title">🎣 낚시</span>
-          <span class="desc">휠로 깊이 조절, 캐치 미니게임</span>
+          <span class="title">낚시</span>
+          <span class="desc">타이밍 캐스팅, 마우스 휠을 이용한 게임</span>
         </button>
         <button class="card" data-game="challenge">
           <span class="title">Challenge</span>
-          <span class="desc">3게임 랜덤 · 5라운드</span>
+          <span class="desc">3게임 랜덤 챌린지 모드!</span>
         </button>
       </div>
-      <p class="hint">조작: 러너(스페이스, ↓), 에임트레이너(마우스) | 메뉴: 좌상단 버튼</p>
+
     </div>
 
     <!-- HUD / 게임오버 -->

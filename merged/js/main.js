@@ -61,12 +61,11 @@
     if (babylonEngine) { babylonEngine.stopRenderLoop(); }
 
     if (this.isAimTrainer) {
-      if (aimTrainerStartEl) { aimTrainerStartEl.classList.remove('hidden'); aimTrainerStartEl.classList.add('show'); }
+      // Remove the start overlay and jump straight into the Aim Trainer
+      if (aimTrainerStartEl) { aimTrainerStartEl.classList.remove('show'); aimTrainerStartEl.classList.add('hidden'); }
       menu.classList.remove('show');
-      canvas2D.style.display = 'none'; canvas3D.style.display = 'none';
-      document.body.style.background = '#0a0a0f';
-      if (aimTrainerPlayBtn) { aimTrainerPlayBtn.onclick = () => { this.startAimTrainerGame(); }; }
       if (backButton) { backButton.classList.add('show'); }
+      this.startAimTrainerGame();
       return;
     }
 
@@ -85,20 +84,27 @@
 
   menu.classList.remove('show'); hud.classList.remove('hidden'); hud.classList.add('show'); overWrap.classList.add('hidden');
   if (aimTargetWrap) aimTargetWrap.classList.add('hidden');
-  if (this.key === 'clicker' || this.key === 'fishing') { 
+  if (this.key === 'clicker') { 
     timerWrap.classList.remove('hidden'); 
     timerWrap.classList.remove('warning'); 
-    // Center timer for both Clicker and Fishing
+    // Center timer for Clicker
     timerWrap.classList.remove('right'); 
     timerEl.textContent = Math.ceil(this.game.time); 
   } else { 
+    // Hide timer for standalone Fishing and Runner
     timerWrap.classList.add('hidden'); 
     timerWrap.classList.remove('right'); 
   }
     // Show target/current for normal games (use default goals)
     const defaults = { runner: 200, fishing: 60, clicker: 300 };
     if (!this.isAimTrainer){
-      if (targetWrap && targetText){ targetWrap.classList.remove('hidden'); targetText.textContent = formatTargetText(this.key, { runner: defaults.runner, fishing: defaults.fishing, clicker: defaults.clicker }, 0); }
+      if (this.key === 'fishing'){
+        // Standalone Fishing: hide center target/current
+        if (targetWrap) targetWrap.classList.add('hidden');
+      } else if (targetWrap && targetText){
+        targetWrap.classList.remove('hidden');
+        targetText.textContent = formatTargetText(this.key, { runner: defaults.runner, fishing: defaults.fishing, clicker: defaults.clicker }, 0);
+      }
       // Hide compact goal box (requested)
       if (goalWrap) goalWrap.classList.add('hidden');
     } else {
@@ -139,12 +145,22 @@
   const scNow = this.game.getScore();
   scoreEl.textContent = scNow; const best = Number(localStorage.getItem(this.bestKey) || 0); bestEl.textContent = best;
   // Update target HUD in normal mode
-  if (targetWrap && targetText && !this.isAimTrainer){ const defaults = { runner: 200, fishing: 60, clicker: 300 }; targetText.textContent = formatTargetText(this.key, { runner: defaults.runner, fishing: defaults.fishing, clicker: defaults.clicker }, scNow); }
-  if(this.key === 'clicker' || this.key === 'fishing'){ const timeLeft = Math.ceil(this.game.time); timerEl.textContent = timeLeft; if (timeLeft <= 10 && timeLeft > 0) { timerWrap.classList.add('warning'); } else { timerWrap.classList.remove('warning'); } }
+  if (targetWrap && targetText && !this.isAimTrainer && this.key !== 'fishing'){
+    const defaults = { runner: 200, fishing: 60, clicker: 300 };
+    targetText.textContent = formatTargetText(this.key, { runner: defaults.runner, fishing: defaults.fishing, clicker: defaults.clicker }, scNow);
+  }
+  if(this.key === 'clicker'){ 
+    const timeLeft = Math.ceil(this.game.time); 
+    timerEl.textContent = timeLeft; 
+    if (timeLeft <= 10 && timeLeft > 0) { timerWrap.classList.add('warning'); } else { timerWrap.classList.remove('warning'); } 
+  }
   if (this.isAimTrainer && this.game.getStats){ const stats=this.game.getStats(); if (accuracyEl) accuracyEl.textContent = stats.accuracy + '%'; if (comboEl){ comboEl.textContent = '×' + stats.combo; if (stats.combo>=5){ comboEl.style.color='#ff0066'; comboEl.style.fontSize='1.3rem'; } else if (stats.combo>=3){ comboEl.style.color='#ff6600'; comboEl.style.fontSize='1.2rem'; } else { comboEl.style.color='#ff3366'; comboEl.style.fontSize='1.1rem'; } } if (hitsEl) hitsEl.textContent = stats.hits + '/' + stats.shots; }
   if (this.isAimTrainer){ if (aimScoreEl && this.game.getScore) { try { aimScoreEl.textContent = String(this.game.getScore()); } catch(e){} } if (aimTimeEl && typeof this.game.time === 'number'){ aimTimeEl.textContent = Math.max(0, Math.ceil(this.game.time)) + 's'; } }
 
-    if(this.game.isOver && !this.gameOverTriggered){ this.gameOverTriggered = true; if (this.isAimTrainer){ document.body.classList.remove('aim-trainer-mode'); canvas3D.style.cursor='default'; if (crosshairEl) crosshairEl.classList.remove('show'); }
+    if(this.game.isOver && !this.gameOverTriggered){ this.gameOverTriggered = true; if (this.isAimTrainer){ document.body.classList.remove('aim-trainer-mode'); canvas3D.style.cursor='default'; if (crosshairEl) crosshairEl.classList.remove('show'); 
+        // Disable canvas input so left-click acts as normal UI click after time-out
+        try { canvas3D.style.pointerEvents = 'none'; if (document.pointerLockElement === canvas3D && document.exitPointerLock){ document.exitPointerLock(); } } catch(e){}
+      }
       const sc=this.game.getScore(); if(sc>best) localStorage.setItem(this.bestKey, String(sc)); finalScore.textContent=sc; finalBest.textContent = Math.max(sc, best);
       if (this.isAimTrainer && this.game.getStats && extraStatsEl){ const stats=this.game.getStats(); extraStatsEl.classList.add('show'); if (gameOverTitle) gameOverTitle.textContent='시간 종료!'; if (gameOverMessage) gameOverMessage.textContent='30초 동안의 결과입니다'; if (finalAccuracy) finalAccuracy.textContent = stats.accuracy + '%'; if (finalMaxCombo) finalMaxCombo.textContent = '×' + stats.maxCombo; if (finalShots) finalShots.textContent = stats.shots + '발'; if (finalHits) finalHits.textContent = stats.hits + '발'; } else { if (extraStatsEl) extraStatsEl.classList.remove('show'); if (gameOverTitle) gameOverTitle.textContent='게임 오버'; if (gameOverMessage) gameOverMessage.textContent=''; }
       overWrap.classList.remove('hidden');
@@ -167,7 +183,8 @@
     if (key==='runner') return `러너 목표: ${targets.runner} | 현재: ${score}`;
     if (key==='fishing') return `낚시 목표: ${targets.fishing} | 현재: ${score}`;
     if (key==='clicker') return `에임 목표: ${targets.clicker} | 현재: ${score}`;
-    return `현재: ${score}`;
+      return `현재: ${score}`; // default (non-challenge) fallback
+  if (this.isAimTrainer){ if (aimScoreEl && this.game.getScore) { try { aimScoreEl.textContent = String(this.game.getScore()); } catch(e){} } if (aimTimeEl && typeof this.game.time === 'number'){ aimTimeEl.textContent = Math.max(0, Math.ceil(this.game.time)) + 's'; } }
   }
 
   ChallengeScene.prototype.shuffleOrder = function(){ this.order = window.Challenge.shuffle(['runner','fishing','clicker']); this.idx = -1; };
@@ -265,7 +282,20 @@
     this.state='finished';
   };
 
-  ChallengeScene.prototype.onExit = function(){ this.updateCountdownUI(false); if (targetWrap) targetWrap.classList.add('hidden'); if (babylonEngine){ babylonEngine.stopRenderLoop(); } document.body.classList.remove('aim-trainer-mode'); };
+  ChallengeScene.prototype.onExit = function(){
+    // Hide countdown and center badges
+    this.updateCountdownUI(false);
+    if (targetWrap) targetWrap.classList.add('hidden');
+    if (aimTargetWrap) aimTargetWrap.classList.add('hidden');
+    if (goalWrap) goalWrap.classList.add('hidden');
+    // Stop any running audio from the current subgame (e.g., Runner BGM)
+    if (this.game && typeof this.game.stopAudio === 'function'){
+      try { this.game.stopAudio(); } catch(e){}
+    }
+    // Stop 3D render loop if active
+    if (babylonEngine){ babylonEngine.stopRenderLoop(); }
+    document.body.classList.remove('aim-trainer-mode');
+  };
   // Ensure Aim 목표 hidden when leaving Challenge scene
   
 

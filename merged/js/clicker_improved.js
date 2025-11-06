@@ -6,6 +6,8 @@
         this.shots = 0; this.hits = 0; this.combo = 0; this.maxCombo = 0;
         this.scene = null; this.engine = null; this.canvas = null; this.camera = null; this.targetMaterials = {}; this.targetsParent = null; this.particleTexture = null; this.isPointerDown = false;
         this.crosshairMesh = null; this.audioContext = null; this.soundEnabled = true; this.gunshotAudio = null; this.sensitivity = 5;
+        // Input handler references for clean removal
+        this._boundPointerDown = null; this._boundPointerUp = null; this._boundClickLock = null; this._boundKeyDown = null; this._inputDisabled = false;
     }
     ClickerGame.prototype.init3D = function(engine, canvas){ 
         this.engine = engine; this.canvas = canvas; this.scene = new BABYLON.Scene(engine);
@@ -17,14 +19,19 @@
         const light1 = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0,1,0), this.scene); light1.intensity = 0.3;
         const light2 = new BABYLON.PointLight("light2", new BABYLON.Vector3(0,5,0), this.scene); light2.intensity = 0.5; light2.diffuse = new BABYLON.Color3(0.8,0.9,1);
         this.createFPSEnvironment(); this.createTargetMaterials(); this.createGunModel(); this.createCrosshair(); this.targetsParent = new BABYLON.TransformNode("targetsParent", this.scene); this.setupParticleSystem();
-        canvas.addEventListener("pointerdown", this.onPointerDown.bind(this)); canvas.addEventListener("pointerup", this.onPointerUp.bind(this));
-        const requestLock = () => {
+        // Bind and register input listeners so we can remove them when the game ends
+        this._boundPointerDown = this.onPointerDown.bind(this);
+        this._boundPointerUp = this.onPointerUp.bind(this);
+        canvas.addEventListener("pointerdown", this._boundPointerDown);
+        canvas.addEventListener("pointerup", this._boundPointerUp);
+        this._boundClickLock = () => {
           if (this.audioContext && this.audioContext.state === 'suspended') { this.audioContext.resume(); }
           if (document.pointerLockElement !== canvas) { canvas.requestPointerLock && canvas.requestPointerLock(); }
-        }; 
-        canvas.addEventListener("click", requestLock);
+        };
+        canvas.addEventListener("click", this._boundClickLock);
+        this._boundKeyDown = this.onKeyDown.bind(this);
+        document.addEventListener("keydown", this._boundKeyDown);
         document.addEventListener('pointerlockchange', () => { /* no-op */ });
-        document.addEventListener("keydown", this.onKeyDown.bind(this));
         this.resetGameLogic(); return this.scene; };
 
     ClickerGame.prototype.createFPSEnvironment = function() {
@@ -49,23 +56,112 @@
     ClickerGame.prototype.createCrosshair = function(){ this.crosshairMesh = null; };
 
     ClickerGame.prototype.createGunModel = function(){
-      this.gunParent = new BABYLON.TransformNode("gunParent", this.scene); this.gunParent.parent = this.camera; this.gunParent.position = new BABYLON.Vector3(0.2, -0.2, 0.5);
-      const slide = BABYLON.MeshBuilder.CreateBox("slide", {width:0.06, height:0.05, depth:0.25}, this.scene); slide.parent = this.gunParent; slide.position.y=0.02; slide.position.z=0.05;
-      const slideMat = new BABYLON.StandardMaterial("slideMat", this.scene); slideMat.diffuseColor = new BABYLON.Color3(0.08,0.08,0.1); slideMat.specularColor = new BABYLON.Color3(0.4,0.4,0.45); slideMat.specularPower = 96; slide.material = slideMat;
-      const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel", {diameter:0.025, height:0.12}, this.scene); barrel.parent=this.gunParent; barrel.rotation.x = Math.PI/2; barrel.position.z=0.24; barrel.position.y=0.02; const barrelMat = new BABYLON.StandardMaterial("barrelMat", this.scene); barrelMat.diffuseColor = new BABYLON.Color3(0.1,0.1,0.12); barrelMat.specularColor = new BABYLON.Color3(0.3,0.3,0.35); barrelMat.specularPower = 128; barrel.material = barrelMat;
-      const frame = BABYLON.MeshBuilder.CreateBox("frame", {width:0.06, height:0.08, depth:0.18}, this.scene); frame.parent=this.gunParent; frame.position.y=-0.02; frame.position.z=-0.02; const frameMat = new BABYLON.StandardMaterial("frameMat", this.scene); frameMat.diffuseColor = new BABYLON.Color3(0.15,0.15,0.17); frameMat.specularColor = new BABYLON.Color3(0.2,0.2,0.22); frameMat.specularPower = 48; frame.material = frameMat;
-      const grip = BABYLON.MeshBuilder.CreateBox("grip", {width:0.05, height:0.12, depth:0.08}, this.scene); grip.parent=this.gunParent; grip.position.y=-0.1; grip.position.z=-0.08; grip.rotation.x=-0.2; const gripMat = new BABYLON.StandardMaterial("gripMat", this.scene); gripMat.diffuseColor = new BABYLON.Color3(0.05,0.05,0.06); gripMat.specularColor = new BABYLON.Color3(0.08,0.08,0.09); gripMat.specularPower = 32; grip.material = gripMat;
+      // Container parent anchored to camera
+      this.gunParent = new BABYLON.TransformNode("gunParent", this.scene);
+      this.gunParent.parent = this.camera;
+      this.gunParent.position = new BABYLON.Vector3(0.3, -0.35, 0.9);
+
+      // Try to load external GLB model (Beretta). If unavailable, fall back to procedural model.
+      let loaded = false;
+      const onLoaded = (meshes)=>{
+        loaded = true;
+        if (meshes && meshes.length){
+          meshes.forEach(m=>{ if (m){ m.parent = this.gunParent; m.isVisible = true; m.setEnabled(true);} });
+          this.gunMesh = meshes[0];
+          this.gunParent.scaling = new BABYLON.Vector3(0.017,0.017,0.017);
+          this.gunParent.rotation = new BABYLON.Vector3(-Math.PI/2, 0, 0);
+        }
+      };
+      const onError = ()=>{
+        if (!loaded){ this.createPrimitiveGunModel(); }
+      };
+      try {
+        BABYLON.SceneLoader.ImportMesh("", "", "beretta_92_clean.glb", this.scene, onLoaded, null, onError);
+      } catch(e){ onError(); }
+      // Fallback timer in case loader neither succeeds nor fails (e.g., blocked file protocol)
+      setTimeout(()=>{ if(!loaded && this.gunParent && !this.gunMesh){ this.createPrimitiveGunModel(); } }, 1500);
+    };
+
+    // Simple procedural pistol model as a reliable fallback
+    ClickerGame.prototype.createPrimitiveGunModel = function(){
+      const slideMat = new BABYLON.StandardMaterial("slideMat", this.scene); slideMat.diffuseColor = new BABYLON.Color3(0.08,0.08,0.1); slideMat.specularColor = new BABYLON.Color3(0.4,0.4,0.45); slideMat.specularPower = 96;
+      const barrelMat = new BABYLON.StandardMaterial("barrelMat", this.scene); barrelMat.diffuseColor = new BABYLON.Color3(0.1,0.1,0.12); barrelMat.specularColor = new BABYLON.Color3(0.3,0.3,0.35); barrelMat.specularPower = 128;
+      const frameMat = new BABYLON.StandardMaterial("frameMat", this.scene); frameMat.diffuseColor = new BABYLON.Color3(0.15,0.15,0.17); frameMat.specularColor = new BABYLON.Color3(0.2,0.2,0.22); frameMat.specularPower = 48;
+      const gripMat = new BABYLON.StandardMaterial("gripMat", this.scene); gripMat.diffuseColor = new BABYLON.Color3(0.05,0.05,0.06); gripMat.specularColor = new BABYLON.Color3(0.08,0.08,0.09); gripMat.specularPower = 32;
+      const ledMat = new BABYLON.StandardMaterial("ledMat", this.scene); ledMat.emissiveColor = new BABYLON.Color3(0,0.7,1);
+
+      const slide = BABYLON.MeshBuilder.CreateBox("slide", {width:0.06, height:0.05, depth:0.25}, this.scene); slide.parent = this.gunParent; slide.position.y=0.02; slide.position.z=0.05; slide.material = slideMat;
+      const barrel = BABYLON.MeshBuilder.CreateCylinder("barrel", {diameter:0.025, height:0.12}, this.scene); barrel.parent=this.gunParent; barrel.rotation.x = Math.PI/2; barrel.position.z=0.24; barrel.position.y=0.02; barrel.material = barrelMat;
+      const frame = BABYLON.MeshBuilder.CreateBox("frame", {width:0.06, height:0.08, depth:0.18}, this.scene); frame.parent=this.gunParent; frame.position.y=-0.02; frame.position.z=-0.02; frame.material = frameMat;
+      const grip = BABYLON.MeshBuilder.CreateBox("grip", {width:0.05, height:0.12, depth:0.08}, this.scene); grip.parent=this.gunParent; grip.position.y=-0.1; grip.position.z=-0.08; grip.rotation.x=-0.2; grip.material = gripMat;
       const triggerGuard = BABYLON.MeshBuilder.CreateTorus("triggerGuard", {diameter:0.06, thickness:0.008, tessellation:16}, this.scene); triggerGuard.parent=this.gunParent; triggerGuard.rotation.x = Math.PI/2; triggerGuard.rotation.z = Math.PI/2; triggerGuard.position.y=-0.04; triggerGuard.position.z=0.01; triggerGuard.scaling.x=0.8; triggerGuard.scaling.y=1.2; triggerGuard.material = slideMat;
       const frontSight = BABYLON.MeshBuilder.CreateBox("frontSight", {width:0.015, height:0.025, depth:0.01}, this.scene); frontSight.parent=this.gunParent; frontSight.position.y=0.047; frontSight.position.z=0.15; frontSight.material = slideMat;
       const rearSight = BABYLON.MeshBuilder.CreateBox("rearSight", {width:0.03, height:0.02, depth:0.008}, this.scene); rearSight.parent=this.gunParent; rearSight.position.y=0.047; rearSight.position.z=-0.05; rearSight.material = slideMat;
       const hammer = BABYLON.MeshBuilder.CreateBox("hammer", {width:0.015, height:0.025, depth:0.02}, this.scene); hammer.parent=this.gunParent; hammer.position.y=0.04; hammer.position.z=-0.1; hammer.rotation.x=-0.3; hammer.material = slideMat;
-      const led = BABYLON.MeshBuilder.CreateBox("led", {width:0.02, height:0.015, depth:0.015}, this.scene); led.parent=this.gunParent; led.position.x=0.035; led.position.y=0.01; led.position.z=0.08; const ledMat = new BABYLON.StandardMaterial("ledMat", this.scene); ledMat.emissiveColor = new BABYLON.Color3(0,0.7,1); led.material = ledMat; const led2 = BABYLON.MeshBuilder.CreateBox("led2", {width:0.02, height:0.015, depth:0.015}, this.scene); led2.parent=this.gunParent; led2.position.x=-0.035; led2.position.y=0.01; led2.position.z=0.08; led2.material = ledMat;
-      this.gunMesh = slide; this.muzzlePosition = new BABYLON.Vector3(0.2, -0.18, 0.8);
+      const led = BABYLON.MeshBuilder.CreateBox("led", {width:0.02, height:0.015, depth:0.015}, this.scene); led.parent=this.gunParent; led.position.x=0.035; led.position.y=0.01; led.position.z=0.08; led.material = ledMat; const led2 = BABYLON.MeshBuilder.CreateBox("led2", {width:0.02, height:0.015, depth:0.015}, this.scene); led2.parent=this.gunParent; led2.position.x=-0.035; led2.position.y=0.01; led2.position.z=0.08; led2.material = ledMat;
+      this.gunMesh = slide;
+      // Adjust parent closer to match our muzzle effect when using fallback
+      this.gunParent.position = new BABYLON.Vector3(0.2, -0.2, 0.5);
     };
 
     ClickerGame.prototype.playGunRecoil = function(){ if (!this.gunParent) return; const originalPos = this.gunParent.position.clone(); const originalRot = this.gunParent.rotation.clone(); const recoilZ=-0.08, recoilY=0.05, recoilX=0.15, duration=0.12; let elapsed=0; const loop=()=>{ elapsed += this.engine.getDeltaTime()/1000; const p=Math.min(elapsed/duration,1); if(p<0.25){ const t=p/0.25; this.gunParent.position.z = originalPos.z + recoilZ*t; this.gunParent.position.y = originalPos.y + recoilY*t; this.gunParent.rotation.x = originalRot.x + recoilX*t; } else { const t=(p-0.25)/0.75; this.gunParent.position.z = originalPos.z + recoilZ*(1-t); this.gunParent.position.y = originalPos.y + recoilY*(1-t); this.gunParent.rotation.x = originalRot.x + recoilX*(1-t);} if(p<1) requestAnimationFrame(loop); else { this.gunParent.position = originalPos; this.gunParent.rotation = originalRot; } }; requestAnimationFrame(loop); };
 
-    ClickerGame.prototype.createMuzzleFlash = function(){ if (!this.camera) return; const flashLight = new BABYLON.PointLight("muzzleFlash", this.camera.position.add(new BABYLON.Vector3(0.3,-0.2,1)), this.scene); flashLight.intensity=5; flashLight.range=3; flashLight.diffuse = new BABYLON.Color3(1,0.8,0.3); setTimeout(()=>flashLight.dispose(),50); const flashParticles = new BABYLON.ParticleSystem("muzzleParticles", 20, this.scene); flashParticles.particleTexture = this.particleTexture; const muzzleWorldPos = this.camera.position.add(this.camera.getDirection(BABYLON.Axis.Z).scale(0.8).add(this.camera.getDirection(BABYLON.Axis.X).scale(0.3)).add(this.camera.getDirection(BABYLON.Axis.Y).scale(-0.2))); flashParticles.emitter = muzzleWorldPos; flashParticles.minSize=0.05; flashParticles.maxSize=0.15; flashParticles.minLifeTime=0.05; flashParticles.maxLifeTime=0.15; flashParticles.emitRate=200; flashParticles.color1 = new BABYLON.Color4(1,0.8,0.3,1); flashParticles.color2 = new BABYLON.Color4(1,0.5,0,1); flashParticles.colorDead = new BABYLON.Color4(0.3,0.1,0,0); flashParticles.minEmitPower=2; flashParticles.maxEmitPower=4; flashParticles.direction1 = this.camera.getDirection(BABYLON.Axis.Z); flashParticles.direction2 = this.camera.getDirection(BABYLON.Axis.Z); flashParticles.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD; flashParticles.start(); setTimeout(()=>{ flashParticles.stop(); setTimeout(()=>flashParticles.dispose(),200); },50); };
+    ClickerGame.prototype.createMuzzleFlash = function(){
+      if (!this.camera || !this.gunParent) return;
+      // Muzzle offset tuned for Beretta
+      const gunOffset = new BABYLON.Vector3(0.4, -0.39, 0.6);
+      const muzzleWorldPos = this.camera.position.add(
+        this.camera.getDirection(BABYLON.Axis.Z).scale(gunOffset.z)
+          .add(this.camera.getDirection(BABYLON.Axis.X).scale(gunOffset.x))
+          .add(this.camera.getDirection(BABYLON.Axis.Y).scale(gunOffset.y))
+      );
+      const flashLight = new BABYLON.PointLight("muzzleFlash", muzzleWorldPos, this.scene);
+      flashLight.intensity = 2; flashLight.range = 2.5; flashLight.diffuse = new BABYLON.Color3(1,0.8,0.3);
+      setTimeout(()=>flashLight.dispose(), 30);
+      // Flame
+      const flashParticles = new BABYLON.ParticleSystem("muzzleFlash", 25, this.scene);
+      flashParticles.particleTexture = this.particleTexture;
+      flashParticles.emitter = muzzleWorldPos;
+      flashParticles.minSize=0.1; flashParticles.maxSize=0.2;
+      flashParticles.minLifeTime=0.06; flashParticles.maxLifeTime=0.12;
+      flashParticles.emitRate=1000; flashParticles.color1=new BABYLON.Color4(1,0.9,0.4,1); flashParticles.color2=new BABYLON.Color4(1,0.6,0.1,0.8); flashParticles.colorDead=new BABYLON.Color4(0.4,0.2,0,0);
+      flashParticles.minEmitPower=4; flashParticles.maxEmitPower=7; flashParticles.createConeEmitter(0.05, Math.PI/16);
+      flashParticles.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD;
+      // Smoke
+      const smokeParticles = new BABYLON.ParticleSystem("muzzleSmoke", 12, this.scene);
+      smokeParticles.particleTexture = this.particleTexture; smokeParticles.emitter = muzzleWorldPos;
+      smokeParticles.minSize=0.1; smokeParticles.maxSize=0.2; smokeParticles.minLifeTime=0.25; smokeParticles.maxLifeTime=0.45; smokeParticles.emitRate=400;
+      smokeParticles.color1=new BABYLON.Color4(0.5,0.5,0.5,0.4); smokeParticles.color2=new BABYLON.Color4(0.3,0.3,0.3,0.25); smokeParticles.colorDead=new BABYLON.Color4(0.2,0.2,0.2,0);
+      smokeParticles.minEmitPower=1.5; smokeParticles.maxEmitPower=2.5; smokeParticles.createConeEmitter(0.08, Math.PI/12); smokeParticles.blendMode = BABYLON.ParticleSystem.BLENDMODE_STANDARD;
+      flashParticles.start(); smokeParticles.start();
+      setTimeout(()=>{ flashParticles.stop(); setTimeout(()=>flashParticles.dispose(),150); }, 70);
+      setTimeout(()=>{ smokeParticles.stop(); setTimeout(()=>smokeParticles.dispose(),450); }, 90);
+    };
+
+    // Bullet casing ejection for extra feedback
+    ClickerGame.prototype.createBulletCasing = function(){
+      if (!this.camera) return;
+      const ejectPos = this.camera.position.add(
+        this.camera.getDirection(BABYLON.Axis.Z).scale(0.25)
+          .add(this.camera.getDirection(BABYLON.Axis.X).scale(0.15))
+          .add(this.camera.getDirection(BABYLON.Axis.Y).scale(-0.1))
+      );
+      const casing = BABYLON.MeshBuilder.CreateCylinder("casing", {height:0.025, diameter:0.012, tessellation:12}, this.scene);
+      casing.position = ejectPos.clone();
+      const casingMat = new BABYLON.StandardMaterial("casingMat", this.scene); casingMat.diffuseColor = new BABYLON.Color3(0.8,0.7,0.3); casingMat.specularColor = new BABYLON.Color3(0.6,0.5,0.2); casingMat.specularPower = 64; casing.material = casingMat;
+      const rightDir = this.camera.getDirection(BABYLON.Axis.X); const upDir = this.camera.getDirection(BABYLON.Axis.Y);
+      const ejectVelocity = rightDir.scale(2).add(upDir.scale(1.5)).add(this.camera.getDirection(BABYLON.Axis.Z).scale(-0.5));
+      const rotationSpeed = new BABYLON.Vector3(Math.random()*10-5, Math.random()*10-5, Math.random()*10-5);
+      const startTime = Date.now(); const lifetime = 1.5; const gravity = -9.8;
+      const animate = () => {
+        const elapsed = (Date.now()-startTime)/1000; if (elapsed>=lifetime || !casing || casing.isDisposed()){ if (casing && !casing.isDisposed()) casing.dispose(); return; }
+        const dt = 1/60; casing.position.addInPlace(ejectVelocity.scale(dt)); ejectVelocity.y += gravity*dt; casing.rotation.addInPlace(rotationSpeed.scale(dt));
+        if (casing.position.y < 0.05){ casing.position.y = 0.05; ejectVelocity.y *= -0.3; ejectVelocity.x *= 0.7; ejectVelocity.z *= 0.7; rotationSpeed.scaleInPlace(0.5); }
+        if (elapsed > lifetime - 0.5){ const p = (elapsed - (lifetime-0.5))/0.5; casingMat.alpha = 1 - p; }
+        requestAnimationFrame(animate);
+      };
+      requestAnimationFrame(animate);
+    };
 
     ClickerGame.prototype.initAudio = function(){
       // Create audio context if available
@@ -170,13 +266,13 @@
 
     ClickerGame.prototype.spawnTarget = function(){ const range=8, zRange=12; const rand=Math.random(); let type,size,speed,points,life; if(rand<0.1){ type='bonus'; size=rnd(0.3,0.4); speed=rnd(2,3); points=15; life=rnd(0.8,1.2);} else if(rand<0.35){ type='fast'; size=rnd(0.4,0.5); speed=rnd(1.5,2.5); points=10; life=rnd(1.0,1.5);} else { type='normal'; size=rnd(0.5,0.7); speed=rnd(0.5,1.5); points=5; life=rnd(1.5,2.5);} const sphere = BABYLON.MeshBuilder.CreateSphere("target", { diameter: size*2 }, this.scene); sphere.position.x = rnd(-range, range); sphere.position.y = rnd(1,4); sphere.position.z = rnd(3,zRange); sphere.material = this.targetMaterials[type]; sphere.parent = this.targetsParent; const moveDir = Math.random()<0.5?0:(Math.random()<0.5?1:-1); const moveAxis = Math.random()<0.5?'x':'y'; const targetData = { mesh:sphere, life:life, remove:false, hit:false, type, points, speed, moveDir, moveAxis, originalPos: sphere.position.clone() }; this.targets.push(targetData); };
 
-    ClickerGame.prototype.update = function(dt){ if(this.over) return; this.time -= dt; if(this.time<=0){ this.time=0; this.over=true; return; } this.updateGunPosition(); this.spawnTimer -= dt; if(this.spawnTimer <= 0){ this.spawnTimer = rnd(0.3,0.7); if (this.targets.length < 8) this.spawnTarget(); }
+    ClickerGame.prototype.update = function(dt){ if(this.over) return; this.time -= dt; if(this.time<=0){ this.time=0; this.over=true; this.disableInput(); return; } this.updateGunPosition(); this.spawnTimer -= dt; if(this.spawnTimer <= 0){ this.spawnTimer = rnd(0.3,0.7); if (this.targets.length < 8) this.spawnTarget(); }
       for(const t of this.targets){ t.life -= dt; if(t.life <= 0){ t.remove = true; if(!t.hit) this.combo = 0; } if (t.moveDir !== 0 && !t.hit){ const offset=t.speed*dt*t.moveDir; if(t.moveAxis==='x'){ t.mesh.position.x += offset; if(Math.abs(t.mesh.position.x - t.originalPos.x) > 3) t.moveDir *= -1; } else { t.mesh.position.y += offset; if(Math.abs(t.mesh.position.y - t.originalPos.y) > 2) t.moveDir *= -1; } } }
       this.targets = this.targets.filter(t=>{ if(t.remove){ t.mesh.dispose(); } return !t.remove; }); this.updateGunPosition(); };
 
     ClickerGame.prototype.updateCrosshairColor = function(){};
 
-    ClickerGame.prototype.onPointerDown = function(event){ if (event.button !== 0) return; if (this.over || this.isPointerDown) return; this.isPointerDown = true; this.shots++; this.playGunRecoil(); this.createMuzzleFlash(); this.playGunshot(); const canvas=this.canvas; const centerX=canvas.width/2, centerY=canvas.height/2; const pickResult = this.scene.pick(centerX, centerY); if (pickResult.hit && pickResult.pickedMesh.name === "target") { const hitMesh = pickResult.pickedMesh; for(const t of this.targets){ if(t.mesh===hitMesh && !t.hit){ this.hits++; this.combo++; this.maxCombo = Math.max(this.maxCombo, this.combo); const comboBonus = Math.min(this.combo - 1, 5) * 2; const totalPoints = t.points + comboBonus; this.score += totalPoints; t.hit=true; t.remove=true; this.playHitSound(t.type==='bonus'); if (this.combo >= 2) { this.playComboSound(this.combo); } hitMesh.material = this.targetMaterials.hit; this.screenShake(t.type==='bonus'?0.05:0.03); this.createHitParticles(hitMesh.position, t.type==='bonus'); this.animateTargetDestruction(hitMesh); break; } } } else { this.combo = 0; } };
+  ClickerGame.prototype.onPointerDown = function(event){ if (event.button !== 0) return; if (this.over || this.isPointerDown) return; this.isPointerDown = true; this.shots++; this.playGunRecoil(); this.createMuzzleFlash(); this.createBulletCasing(); this.playGunshot(); const canvas=this.canvas; const centerX=canvas.width/2, centerY=canvas.height/2; const pickResult = this.scene.pick(centerX, centerY); if (pickResult.hit && pickResult.pickedMesh && pickResult.pickedMesh.name === "target") { const hitMesh = pickResult.pickedMesh; for(const t of this.targets){ if(t.mesh===hitMesh && !t.hit){ this.hits++; this.combo++; this.maxCombo = Math.max(this.maxCombo, this.combo); const comboBonus = Math.min(this.combo - 1, 5) * 2; const totalPoints = t.points + comboBonus; this.score += totalPoints; t.hit=true; t.remove=true; this.playHitSound(t.type==='bonus'); if (this.combo >= 2) { this.playComboSound(this.combo); } hitMesh.material = this.targetMaterials.hit; this.screenShake(t.type==='bonus'?0.05:0.03); this.createHitParticles(hitMesh.position, t.type==='bonus'); this.animateTargetDestruction(hitMesh); break; } } } else { this.combo = 0; } };
     ClickerGame.prototype.onPointerUp = function(event){ if (event.button === 0) this.isPointerDown = false; };
 
     ClickerGame.prototype.onKeyDown = function(event){ if (this.over) return; if (event.key === '['){ this.sensitivity = Math.max(1, this.sensitivity - 1); this.updateSensitivity(); this.showSensitivity(); } else if (event.key === ']'){ this.sensitivity = Math.min(10, this.sensitivity + 1); this.updateSensitivity(); this.showSensitivity(); } };
@@ -192,5 +288,30 @@
     ClickerGame.prototype.getScore = function(){ return this.score; };
     ClickerGame.prototype.getStats = function(){ return { accuracy: this.getAccuracy(), combo: this.combo, maxCombo: this.maxCombo, hits: this.hits, shots: this.shots }; };
     Object.defineProperty(ClickerGame.prototype,'isOver',{ get(){ return this.over; }});
+    
+    // Disable input and pointer lock when the round ends or on scene exit
+    ClickerGame.prototype.disableInput = function(){
+      if (this._inputDisabled) return; this._inputDisabled = true;
+      const canvas = this.canvas;
+      try {
+        if (canvas){
+          if (this._boundPointerDown) canvas.removeEventListener('pointerdown', this._boundPointerDown);
+          if (this._boundPointerUp) canvas.removeEventListener('pointerup', this._boundPointerUp);
+          if (this._boundClickLock) canvas.removeEventListener('click', this._boundClickLock);
+          // prevent canvas from catching clicks while game over overlay is shown
+          canvas.style.pointerEvents = 'none';
+        }
+        if (this._boundKeyDown) document.removeEventListener('keydown', this._boundKeyDown);
+        if (document.pointerLockElement === canvas && document.exitPointerLock){ document.exitPointerLock(); }
+      } catch(e){}
+    };
+
+    // Optional stopAudio hook used by scene manager on exit; also cleanup inputs
+    ClickerGame.prototype.stopAudio = function(){
+      try {
+        if (this.audioContext && this.audioContext.state === 'running'){ this.audioContext.suspend(); }
+      } catch(e){}
+      this.disableInput();
+    };
     window.ClickerGame = ClickerGame;
 })();
