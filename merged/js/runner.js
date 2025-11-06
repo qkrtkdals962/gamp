@@ -76,7 +76,7 @@
     const mk = (src)=>{ const i=new Image(); i.src = src; return i; };
   // Use assets from GameProject to avoid duplication
   // Note: index.html is at merged/merged/index.html, while GameProject is at ../../GameProject
-  const base = '../../GameProject/assets/images/';
+  const base = '/image/';
     this.images.player = mk(base + '토끼.png');
     this.images.groundBlock = mk(base + '바닥장애물.png');
     this.images.vertBar = mk(base + '슬라이딩해서피해야하는장애물.png');
