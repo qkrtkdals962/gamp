@@ -74,7 +74,7 @@
     // 이번 프레임의 휠 누적량 가져오기(가져가면 0으로 초기화됨은 loop에서 수행)
     peekWheel(){ return this.mouse._wheel; },
 
-    clear(col='#0b1020'){ this.ctx.fillStyle=col; this.ctx.fillRect(0,0,this.width,this.height); },
+    clear(col='#5fe7f1ff'){ this.ctx.fillStyle=col; this.ctx.fillRect(0,0,this.width,this.height); },
 
     drawText(txt,x,y,clr='#e9f1ff',size=18,align='left'){
       const c=this.ctx;

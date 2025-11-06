@@ -309,13 +309,13 @@
   };
 
   GameFishing.prototype.draw = function(){
-    const c=E.ctx; E.clear('#0b1220');
+    const c=E.ctx; E.clear('#0b2020ff');
 
     // 물 배경 + 수면
     const waterTop = this.waterTop;
-    c.fillStyle='#0f213a';
+    c.fillStyle='#244778ff';
     c.fillRect(0, waterTop, E.width, E.height-waterTop);
-    c.strokeStyle='rgba(180,220,255,.35)'; c.lineWidth=2; c.beginPath();
+    c.strokeStyle='rgba(65, 213, 249, 0.35)'; c.lineWidth=2; c.beginPath();
     for(let x=0;x<=E.width;x+=8){
       const y = waterTop + Math.sin((x+performance.now()*0.08)*0.02)*3;
       if(x===0) c.moveTo(x,y); else c.lineTo(x,y);
@@ -370,7 +370,8 @@
   GameFishing.prototype.drawCastTimingBar = function(){
     const c=E.ctx, t=this.timing;
     // 배경
-    c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(t.x, t.y, t.w, t.h);
+    c.fillStyle='rgba(255,255,255,0.12)';
+    c.fillRect(t.x, t.y, t.w, t.h);
     // wide(끝) 강조
     c.fillStyle='rgba(255,80,80,0.10)';
     c.fillRect(t.x-2, t.y, t.w+4, 22);
@@ -403,7 +404,7 @@
     const c=E.ctx, ln=this.lane;
 
     // 트랙
-    c.fillStyle='rgba(255,255,255,0.07)';
+    c.fillStyle='rgba(147, 161, 240, 0.07)';
     c.fillRect(ln.x-70, ln.top, 140, ln.bottom - ln.top);
 
     // 스프라이트로 물고기 그리기 (픽셀 처리된 offscreen canvas 우선)
@@ -416,7 +417,7 @@
       const sh = src.naturalHeight || src.height;
       const ar = sw / sh;
       const drawW = Math.max(1, targetH * ar);
-      const drawX = ln.x + 10;
+      const drawX = ln.x - drawW / 2;
       const drawY = this.fish.y - targetH/2;
       const prev = c.imageSmoothingEnabled;
       c.imageSmoothingEnabled = true;
@@ -429,14 +430,15 @@
     }
 
     // 플레이어 바
+    const barW = 70;
     c.fillStyle='rgba(255,209,102,0.35)';
-    c.fillRect(ln.x-55, this.bar.y, 110, this.bar.h);
+    c.fillRect(ln.x - barW/2, this.bar.y, barW, this.bar.h);
     c.strokeStyle='rgba(255,209,102,0.9)';
-    c.lineWidth=2; c.strokeRect(ln.x-55, this.bar.y, 110, this.bar.h);
+    c.lineWidth=2; c.strokeRect(ln.x - barW/2, this.bar.y, barW, this.bar.h);
 
     // 진행도
     const gx = 40, gy = this.waterTop - 30, gw = E.width-80, gh = 8;
-    c.fillStyle='rgba(255,255,255,0.12)'; c.fillRect(gx,gy,gw,gh);
+    c.fillStyle='rgba(255, 255, 255, 0.12)'; c.fillRect(gx,gy,gw,gh);
     c.fillStyle='#a3d6a6'; c.fillRect(gx,gy,gw*this.catchMeter,gh);
 
     const zoneK = this.zone==='surface'?'수면':this.zone==='mid'?'중앙':'심해';
