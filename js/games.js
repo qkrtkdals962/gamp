@@ -13,7 +13,49 @@
   };
   // 크기별 목표 높이(px) — 비율 유지
   const FISH_SPRITE_HEIGHT = { small: 26, mid: 36, big: 52 };
-  function loadImage(src){ const img = new Image(); img.src = src; return img; }
+
+  // 흰 배경 투명화 로더 (http/https일 때만 픽셀 처리)
+  function loadImage(src){
+    const img = new Image();
+    const useCross = location.protocol.startsWith('http'); // http/https 환경에서만 crossOrigin + 픽셀 처리
+    if(useCross) img.crossOrigin = 'anonymous';
+    img._canvas = null;
+
+    img.addEventListener('load', ()=>{
+      // file:// 환경에서는 getImageData 시 CORS/tainted canvas 문제가 자주 발생하므로 처리 생략
+      if(!useCross) return;
+
+      try{
+        const w = img.naturalWidth, h = img.naturalHeight;
+        if(w === 0 || h === 0) return;
+        const off = document.createElement('canvas');
+        off.width = w; off.height = h;
+        const oc = off.getContext('2d');
+        oc.drawImage(img, 0, 0, w, h);
+        const data = oc.getImageData(0,0,w,h);
+        const px = data.data;
+        const tol = 36;
+        for(let i=0;i<px.length;i+=4){
+          const r = px[i], g = px[i+1], b = px[i+2], a = px[i+3];
+          if(a === 0) continue;
+          const bright = (r + g + b) / 3;
+          const distToWhite = Math.abs(255-r) + Math.abs(255-g) + Math.abs(255-b);
+          if(bright > 245 || distToWhite <= tol){
+            px[i+3] = 0; // 거의 흰색 → 투명
+          }
+        }
+        oc.putImageData(data, 0, 0);
+        img._canvas = off;
+      }catch(e){
+        // CORS로 인해 처리 불가 시 조용히 실패 처리(이미지 자체는 그대로 사용됨)
+        img._canvas = null;
+      }
+    });
+
+    img.addEventListener('error', ()=>{ /* 필요시 로깅 */ });
+    img.src = src;
+    return img;
+  }
 
   // ---- 확률 유틸 ----
   function roll(weights){
@@ -35,18 +77,19 @@
   }
   function pointsFor(size){ return size==='small'?1:(size==='mid'?3:5); }
 
-  // 큰 물고기 몸부림(상하 진폭/버스트) 강화
+  // 큰 물고기 몸부림(상하 진폭/버스트) — 중간·큰 물고기 "움직임 폭" 강화
   const FISH_PROFILES = {
     small:{ amp:18, freq:1.4, jitter:1,  burstProb:0.15, burstDur:0.25, burstForce:140, mass:0.8 },
-    mid:  { amp:30, freq:1.1, jitter:2,  burstProb:0.25, burstDur:0.35, burstForce:170, mass:1.1 },
-    big:  { amp:56, freq:0.8, jitter:4,  burstProb:0.45, burstDur:0.50, burstForce:220, mass:1.6 }
+    // ⬇⬇ 여기서 진폭(amp) 상향
+    mid:  { amp:44, freq:1.1, jitter:2,  burstProb:0.25, burstDur:0.35, burstForce:170, mass:1.1 },
+    big:  { amp:80, freq:0.8, jitter:4,  burstProb:0.45, burstDur:0.50, burstForce:220, mass:1.6 }
   };
 
   // 깊이에 따른 미니게임 난이도
   function depthToConfig(depth01){
     const fishSpeed  = 80 + depth01*140;
     const barSize    = 120 - depth01*40;
-    const fillRate   = 0.65;
+    const fillRate   = 0.325;
     const drainRate  = 0.55;
     const barVMax    = 260 + depth01*180;
     const wheelStep  = 70 + depth01*55;
@@ -185,7 +228,7 @@
         });
 
         this.catchMeter = 0.35;
-        this.grace = 5.0;
+        this.grace = 3.0; // ⬅ 무적시간 5.0 → 3.0으로 단축
         this.state='minigame';
       }
       return;
@@ -249,7 +292,7 @@
         const pts = pointsFor(this.fishSize);
         this.score += pts;
         this._resTimer = 1.1;
-        this.lastCatchText = `구역:${this.zone==='surface'?'수면':this.zone==='mid'?'중앙':'심해'} · 크기:${this.fishSize==='small'?'작은':this.fishSize==='mid'?'중간':'큰'} · +${pts}점`;
+        this.lastCatchText = `구역:${this.zone==='surface'?'수면':this.zone==='mid'?'중앙':'심해'} · 크기:${this.fishSize==='small'?'작은':'중간'&&this.fishSize==='mid'?'중간':'큰'} · +${pts}점`;
       }else if(this.catchMeter <= 0 && this.grace<=0){
         this.state='miss';
         this._resTimer = 1.0;
@@ -363,17 +406,21 @@
     c.fillStyle='rgba(255,255,255,0.07)';
     c.fillRect(ln.x-70, ln.top, 140, ln.bottom - ln.top);
 
-    // 스프라이트로 물고기 그리기
+    // 스프라이트로 물고기 그리기 (픽셀 처리된 offscreen canvas 우선)
     const img = this.currentFishImg;
     const targetH = FISH_SPRITE_HEIGHT[this.fishSize] || 32;
-    if(img && img.complete && img.naturalWidth > 0){
-      const ar = img.width / img.height;
+    const src = img && img._canvas ? img._canvas : img;
+    const hasSrc = src && ((src.complete === undefined) || src.complete) && (src.naturalWidth || src.width);
+    if(hasSrc){
+      const sw = src.naturalWidth || src.width;
+      const sh = src.naturalHeight || src.height;
+      const ar = sw / sh;
       const drawW = Math.max(1, targetH * ar);
       const drawX = ln.x + 10;
       const drawY = this.fish.y - targetH/2;
       const prev = c.imageSmoothingEnabled;
       c.imageSmoothingEnabled = true;
-      c.drawImage(img, drawX, drawY, drawW, targetH);
+      c.drawImage(src, drawX, drawY, drawW, targetH);
       c.imageSmoothingEnabled = prev;
     }else{
       // 로딩 전 폴백(임시 원)
